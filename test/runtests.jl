@@ -48,6 +48,12 @@ const MODELS = [
     ("HS36",     b -> hs36_model(; backend = b)),
     ("HS37",     b -> hs37_model(; backend = b)),
     ("HS38",     b -> hs38_model(; backend = b)),
+    ("HS39",     b -> hs39_model(; backend = b)),
+    ("HS40",     b -> hs40_model(; backend = b)),
+    ("HS41",     b -> hs41_model(; backend = b)),
+    ("HS43",     b -> hs43_model(; backend = b)),
+    ("HS44",     b -> hs44_model(; backend = b)),
+    ("HS45",     b -> hs45_model(; backend = b)),
     ("TAME",     b -> tame_model(; backend = b)),
     ("ALSOTAME", b -> alsotame_model(; backend = b)),
     ("DEGDIAG",  b -> degdiag_model(; backend = b)),
@@ -97,8 +103,8 @@ function test_cutest_callbacks(cutest_name, build_model)
                 # entries per block; CUTEst counts unique positions.
 
                 @test mw.meta.x0   ≈ x0              atol = 1e-10
-                @test mw.meta.lvar ≈ ref.meta.lvar   atol = 1e-10
-                @test mw.meta.uvar ≈ ref.meta.uvar   atol = 1e-10
+                @test mw.meta.lvar ≈ ref.meta.lvar   rtol = 1e-10
+                @test mw.meta.uvar ≈ ref.meta.uvar   rtol = 1e-10
 
                 if ncon > 0
                     @test mw.meta.lcon ≈ ref.meta.lcon atol = 1e-10

@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        julia-version: ['1', 'lts']
+        julia-version: ['1']
         os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v4

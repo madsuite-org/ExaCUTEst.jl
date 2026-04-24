@@ -40,6 +40,12 @@ include("HS35.jl")
 include("HS36.jl")
 include("HS37.jl")
 include("HS38.jl")
+include("HS39.jl")
+include("HS40.jl")
+include("HS41.jl")
+include("HS43.jl")
+include("HS44.jl")
+include("HS45.jl")
 include("TAME.jl")
 include("ALSOTAME.jl")
 include("DEGDIAG.jl")
@@ -63,6 +69,7 @@ export rosenbr_model,
        hs26_model, hs27_model, hs28_model, hs29_model, hs30_model,
        hs31_model, hs32_model, hs33_model, hs34_model,
        hs35_model, hs36_model, hs37_model, hs38_model,
+       hs39_model, hs40_model, hs41_model, hs43_model, hs44_model, hs45_model,
        tame_model, alsotame_model, degdiag_model,
        zangwil3_model, booth_model, himmelbc_model, himmelbd_model, himmelbe_model,
        rsnbrne_model, bt1_model, zecevic2_model,
