@@ -1,0 +1,15 @@
+name = "ExaCUTEst"
+uuid = "9cb3a1db-3fb4-4d49-92ce-e401df6f29bb"
+version = "0.1.0"
+authors = ["Sungho Shin <sushin@mit.edu>"]
+
+[deps]
+ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
+
+[extras]
+CUTEst = "1b53aba6-0008-4ef0-a36b-f0a74e0d8b4c"
+NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["CUTEst", "NLPModels", "Test"]
