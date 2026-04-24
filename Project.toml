@@ -6,6 +6,12 @@ authors = ["Sungho Shin <sushin@mit.edu>"]
 [deps]
 ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
 
+[compat]
+ExaModels = "0.10"
+
+[sources]
+ExaModels = {url = "https://github.com/exanauts/ExaModels.jl.git", rev = "main"}
+
 [extras]
 CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
