@@ -27,6 +27,10 @@ const MODELS = [
     ("RSNBRNE",  b -> rsnbrne_model(; backend = b)),
     ("BT1",      b -> bt1_model(; backend = b)),
     ("ZECEVIC2", b -> zecevic2_model(; backend = b)),
+    ("HIMMELBE", b -> himmelbe_model(; backend = b)),
+    ("HS34",     b -> hs34_model(; backend = b)),
+    ("EXPFIT",   b -> expfit_model(; backend = b)),
+    ("LSQFIT",   b -> lsqfit_model(; backend = b)),
 ]
 
 # ── Callback test against CUTEst reference ───────────────────────────────────────

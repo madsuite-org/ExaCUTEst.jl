@@ -8,6 +8,7 @@ include("HS4.jl")
 include("HS5.jl")
 include("HS9.jl")
 include("HS21.jl")
+include("HS34.jl")
 include("TAME.jl")
 include("ALSOTAME.jl")
 include("DEGDIAG.jl")
@@ -15,13 +16,17 @@ include("ZANGWIL3.jl")
 include("BOOTH.jl")
 include("HIMMELBC.jl")
 include("HIMMELBD.jl")
+include("HIMMELBE.jl")
 include("RSNBRNE.jl")
 include("BT1.jl")
 include("ZECEVIC2.jl")
+include("EXPFIT.jl")
+include("LSQFIT.jl")
 
-export rosenbr_model, hs3_model, hs4_model, hs5_model, hs9_model, hs21_model,
+export rosenbr_model, hs3_model, hs4_model, hs5_model, hs9_model, hs21_model, hs34_model,
        tame_model, alsotame_model, degdiag_model,
-       zangwil3_model, booth_model, himmelbc_model, himmelbd_model,
-       rsnbrne_model, bt1_model, zecevic2_model
+       zangwil3_model, booth_model, himmelbc_model, himmelbd_model, himmelbe_model,
+       rsnbrne_model, bt1_model, zecevic2_model,
+       expfit_model, lsqfit_model
 
 end # module ExaCUTEst
