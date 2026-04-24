@@ -12,22 +12,29 @@ const BACKENDS = Any[nothing]
 # Each entry: (CUTEst problem name, model builder taking a backend keyword)
 const MODELS = [
     ("ROSENBR",  b -> rosenbr_model(; backend = b)),
+    ("HS3",      b -> hs3_model(; backend = b)),
+    ("HS4",      b -> hs4_model(; backend = b)),
     ("HS5",      b -> hs5_model(; backend = b)),
+    ("HS9",      b -> hs9_model(; backend = b)),
+    ("HS21",     b -> hs21_model(; backend = b)),
     ("TAME",     b -> tame_model(; backend = b)),
     ("ALSOTAME", b -> alsotame_model(; backend = b)),
     ("DEGDIAG",  b -> degdiag_model(; backend = b)),
+    ("ZANGWIL3", b -> zangwil3_model(; backend = b)),
+    ("BOOTH",    b -> booth_model(; backend = b)),
+    ("HIMMELBC", b -> himmelbc_model(; backend = b)),
+    ("HIMMELBD", b -> himmelbd_model(; backend = b)),
+    ("RSNBRNE",  b -> rsnbrne_model(; backend = b)),
+    ("BT1",      b -> bt1_model(; backend = b)),
+    ("ZECEVIC2", b -> zecevic2_model(; backend = b)),
 ]
 
 # ── Callback test against CUTEst reference ───────────────────────────────────────
-# build_model(backend) returns an ExaModel.  WrapperNLPModel brings GPU output
-# back to CPU so the same comparison code works for every backend.
 function test_cutest_callbacks(cutest_name, build_model)
     ref = CUTEstModel(cutest_name)
     try
         nvar = ref.meta.nvar
         ncon = ref.meta.ncon
-        nnzj = ref.meta.nnzj
-        nnzh = ref.meta.nnzh
         x0   = copy(ref.meta.x0)
         y0   = zeros(Float64, ncon)
 
@@ -52,8 +59,16 @@ function test_cutest_callbacks(cutest_name, build_model)
                 @test mw.meta.nvar == nvar
                 @test mw.meta.ncon == ncon
                 # nnzj/nnzh not compared: ExaModels may count duplicate (row,col)
-                # entries per block; CUTEst counts unique positions.  Correctness
-                # is verified below via assembled sparse matrix norms.
+                # entries per block; CUTEst counts unique positions.
+
+                @test mw.meta.x0   ≈ x0              atol = 1e-10
+                @test mw.meta.lvar ≈ ref.meta.lvar   atol = 1e-10
+                @test mw.meta.uvar ≈ ref.meta.uvar   atol = 1e-10
+
+                if ncon > 0
+                    @test mw.meta.lcon ≈ ref.meta.lcon atol = 1e-10
+                    @test mw.meta.ucon ≈ ref.meta.ucon atol = 1e-10
+                end
 
                 @test NLPModels.obj(mw, x0)  ≈ f_ref atol = 1e-10
                 @test NLPModels.grad(mw, x0) ≈ g_ref atol = 1e-10
