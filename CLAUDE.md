@@ -8,15 +8,15 @@ ExaCUTEst.jl converts CUTEst SIF benchmark problems into [ExaModels](https://git
 src/
   ExaCUTEst.jl    # module: include + export all problems
   ROSENBR.jl      # each file = one SIF problem
-  HS5.jl
-  TAME.jl
-  ALSOTAME.jl
-  DEGDIAG.jl
+  HS3.jl  HS4.jl  HS5.jl  HS9.jl  HS21.jl  HS34.jl
+  TAME.jl  ALSOTAME.jl  DEGDIAG.jl
+  ZANGWIL3.jl  BOOTH.jl  HIMMELBC.jl  HIMMELBD.jl  HIMMELBE.jl
+  RSNBRNE.jl  BT1.jl  ZECEVIC2.jl  EXPFIT.jl  LSQFIT.jl
 test/
   runtests.jl     # loops over MODELS, compares every callback against CUTEst.jl
 .github/
   workflows/
-    test.yml      # CI: cpu (ubuntu-latest) + gpu (self-hosted cuda)
+    test.yml      # CI: ubuntu-latest (GitHub-hosted), Julia 1 and lts
 ```
 
 ## How to add a new problem
@@ -37,12 +37,17 @@ See `src/ROSENBR.jl` as the simplest example, `src/TAME.jl` for equality constra
 Always use the ExaModels macro forms — these are the first-class API:
 ```julia
 ExaModels.@add_var(c, x, N; lvar = ..., uvar = ..., start = ...)
+ExaModels.@add_par(c, θ, data)               # named parameter array (θ[i] usable in loops)
 ExaModels.@add_obj(c, expr)                  # scalar term
 ExaModels.@add_obj(c, expr for i in iter)    # sum over loop
 ExaModels.@add_con(c, expr)                  # scalar constraint
 ExaModels.@add_con(c, expr for i in iter)    # vectorised constraints
 ```
-Never use the functional forms (`add_var`, `add_obj`, `add_con`).
+Never use the functional forms (`add_var`, `add_obj`, `add_con`, `add_par`).
+
+Use `@add_par` when a loop expression needs to index into a fixed data array (e.g., observation
+data Xi, Yi). The named parameter `θ` is then accessible as `θ[i]` inside `@add_obj`/`@add_con`
+generators. See `src/LSQFIT.jl` for an example.
 
 ## CI structure
 
@@ -58,7 +63,9 @@ The test runner uses `CUDA.functional()` to auto-detect GPU availability, so the
 Every problem in `MODELS` is tested by `test_cutest_callbacks(name, build_model)` which:
 1. Loads `CUTEstModel(name)` as ground truth.
 2. For each backend, builds the ExaModel, wraps it with `ExaModels.WrapperNLPModel` (which moves GPU outputs back to CPU), then checks:
-   - `nvar`, `ncon`, `nnzj`, `nnzh` match CUTEst
+   - `nvar`, `ncon` match CUTEst
+   - `x0`, `lvar`, `uvar` match CUTEst (atol=1e-10)
+   - `lcon`, `ucon` match CUTEst (when ncon > 0, atol=1e-10)
    - `obj`, `grad`, `cons` at the starting point match CUTEst (atol=1e-10)
    - `jac_structure` + `jac_coord`: assembled sparse Jacobian matches CUTEst (norm < 1e-10)
    - `hess_structure` + `hess_coord`: assembled sparse Hessian matches CUTEst (norm < 1e-10)
@@ -95,19 +102,34 @@ For inequality groups (L type ≤ 0, G type ≥ 0), set `lcon`/`ucon` appropriat
 
 ### GROUP TYPE functions
 
-| SIF type | φ(v) |
-|----------|------|
-| L2 / SQUARE | v² |
-| SINE | sin(v) |
-| COS | cos(v) |
-| EXP / EXPN | exp(v) |
+| SIF type | F(v) | contribution with scale σ |
+|----------|------|--------------------------|
+| L2 / SQUARE | v² | v²/σ |
+| CUBE | v³ | v³/σ |
+| SINE | sin(v) | sin(v)/σ |
+| COS | cos(v) | cos(v)/σ |
+| EXP / EXPN | exp(v) | exp(v)/σ |
 
-Without a GROUP TYPE the function is the identity (φ(v) = v), i.e., a pure linear/element sum.
+Contribution formula: `F(v)/σ` where `v` is the raw group value and `F` is the type function.
+Without a GROUP TYPE the function is the identity (F(v) = v), i.e., contribution = v (scale ignored for identity since F(v)/σ = v/σ ≡ v for unscaled identity groups).
+
+### Constraint ordering
+
+CUTEst's sifdecoder does not always preserve the SIF GROUP section order for constraints:
+- Groups without elements (purely linear) may appear **before** groups with elements.
+- Always verify constraint ordering empirically: run `NLPModels.cons(CUTEstModel(name), x0)`
+  and confirm which formula matches each cons[i]. See RSNBRNE (G2 before G1) and HIMMELBE
+  (G3, G2 before G1).
 
 ### ELEMENT TYPE
 
 Element types define nonlinear functions of one or more variables. The element value is added (with a coefficient) to the group's nonlinear part. Common elements:
 - `SQ(V1)` = V1²  (coefficient in GROUP USES is the multiplier)
+- `EXP(V1)` = -exp(V1)  (note sign: F=-exp in HS34)
+- `EXPIH(V,W; RI)` = V*exp(W*0.25*RI)  (EXPFIT parametric element)
+
+For elements with **IV** (internal variables), expand the IV definition: e.g., `IV U = X + Y`
+means U = X + Y, so `F = 0.25*U²` → `F = 0.25*(X+Y)²` (see HIMMELBE).
 
 ### QUADRATIC section
 
