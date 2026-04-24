@@ -7,7 +7,7 @@ authors = ["Sungho Shin <sushin@mit.edu>"]
 ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
 
 [extras]
-CUTEst = "1b53aba6-0008-4ef0-a36b-f0a74e0d8b4c"
+CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
