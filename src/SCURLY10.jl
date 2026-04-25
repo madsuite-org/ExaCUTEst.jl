@@ -18,8 +18,9 @@ function scurly10_model(N = 10000; T = Float64, backend = nothing, kwargs...)
     # Scale factors: S[I] = exp((I-1)/(N-1)*SCAL), I=1..N
     S = T[exp(T(I - 1) / RN_1 * SCAL) for I in 1:N]
 
-    # Start point: x0[I] = S[I] + 0.0001*I/(N+1)
-    x0 = T[S[I] + T(0.0001) * T(I) / RN_p1 for I in 1:N]
+    # Start point: x0[I] = 0.0001 * I/(N+1) * S[I]
+    # SIF: RI T=I, R/ T=I/(N+1), RM T=0.0001*T, AM T=T*S(I)
+    x0 = T[T(0.0001) * T(I) / RN_p1 * S[I] for I in 1:N]
 
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = x0)

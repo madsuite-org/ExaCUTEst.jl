@@ -7,7 +7,7 @@
 #   + 10*(x[2i] + x[2i+2] - 2)^2  [E(i): L2, scale=0.1]
 #   + (x[2i] - x[2i+2])^2 / 10    [F(i): L2, scale=10]
 # ]
-# CONST group: identity (no GROUP TYPE), no vars, constant=1.0 → contribution = -1.0
+# CONST group: L2 type (T 'DEFAULT' L2 applies), no vars, constant=1.0 → v=-1, contribution=1
 # Default NS = 1999 → N = 4000 variables
 # Source: Conn, Gould, Toint (1988), problem 8
 # SIF element MSQ: F = -V*V (negative square added to linear part)

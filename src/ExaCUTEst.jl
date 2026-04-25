@@ -206,6 +206,8 @@ include("MAKELA3.jl")
 include("MAKELA4.jl")
 include("GOTTFR.jl")
 include("SCOSINE.jl")
+include("SINEALI.jl")
+include("S368.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -310,6 +312,8 @@ export rosenbr_model,
        makela3_model,
        makela4_model,
        gottfr_model,
-       scosine_model
+       scosine_model,
+       sineali_model,
+       s368_model
 
 end # module ExaCUTEst
