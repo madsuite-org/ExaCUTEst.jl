@@ -27,6 +27,7 @@ include("HS21.jl")
 include("HS22.jl")
 include("HS23.jl")
 include("HS24.jl")
+include("HS25.jl")
 include("HS26.jl")
 include("HS27.jl")
 include("HS28.jl")
@@ -43,6 +44,7 @@ include("HS38.jl")
 include("HS39.jl")
 include("HS40.jl")
 include("HS41.jl")
+include("HS42.jl")
 include("HS43.jl")
 include("HS44.jl")
 include("HS45.jl")
@@ -146,7 +148,9 @@ include("VARDIM.jl")
 include("FREUROTH.jl")
 include("NONCVXU2.jl")
 include("SPARSQUR.jl")
+include("BROYDN3D.jl")
 include("BROYDN7D.jl")
+include("BRYBND.jl")
 include("ENGVAL2.jl")
 include("CRAGGLVY.jl")
 include("MOREBV.jl")
@@ -181,6 +185,25 @@ include("HILBERTA.jl")
 include("BROWNALE.jl")
 include("CLPLATEA.jl")
 include("YATP1SQ.jl")
+include("EXTROSNB.jl")
+include("NONDIA.jl")
+include("CHAINWOO.jl")
+include("CLIFF.jl")
+include("DENSCHNA.jl")
+include("DENSCHNB.jl")
+include("DENSCHNC.jl")
+include("DENSCHND.jl")
+include("DENSCHNE.jl")
+include("DENSCHNF.jl")
+include("NONDQUAR.jl")
+include("INDEF.jl")
+include("INDEFM.jl")
+include("MAKELA1.jl")
+include("MAKELA2.jl")
+include("MAKELA3.jl")
+include("MAKELA4.jl")
+include("GOTTFR.jl")
+include("SCOSINE.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -188,10 +211,10 @@ export rosenbr_model,
        hs11_model, hs12_model, hs13_model, hs14_model, hs15_model,
        hs16_model, hs17_model, hs18_model, hs19_model, hs20_model,
        hs21_model, hs22_model, hs23_model, hs24_model,
-       hs26_model, hs27_model, hs28_model, hs29_model, hs30_model,
+       hs25_model, hs26_model, hs27_model, hs28_model, hs29_model, hs30_model,
        hs31_model, hs32_model, hs33_model, hs34_model,
        hs35_model, hs36_model, hs37_model, hs38_model,
-       hs39_model, hs40_model, hs41_model, hs43_model, hs44_model, hs45_model,
+       hs39_model, hs40_model, hs41_model, hs42_model, hs43_model, hs44_model, hs45_model,
        hs46_model, hs47_model, hs48_model, hs49_model, hs50_model,
        hs51_model, hs52_model, hs53_model, hs54_model, hs55_model,
        hs56_model, hs57_model, hs59_model,
@@ -237,7 +260,9 @@ export rosenbr_model,
        freuroth_model,
        noncvxu2_model,
        sparsqur_model,
+       broydn3d_model,
        broydn7d_model,
+       brybnd_model,
        engval2_model,
        cragglvy_model,
        morebv_model,
@@ -264,6 +289,25 @@ export rosenbr_model,
        bdry2_model, hilberta_model,
        brownale_model,
        clplatea_model,
-       yatp1sq_model
+       yatp1sq_model,
+       extrosnb_model,
+       nondia_model,
+       chainwoo_model,
+       cliff_model,
+       denschna_model,
+       denschnb_model,
+       denschnc_model,
+       denschnd_model,
+       denschne_model,
+       denschnf_model,
+       nondquar_model,
+       indef_model,
+       indefm_model,
+       makela1_model,
+       makela2_model,
+       makela3_model,
+       makela4_model,
+       gottfr_model,
+       scosine_model
 
 end # module ExaCUTEst

@@ -2,7 +2,13 @@
 # 65 groups, all L2 type (no scale): contribution = v_i^2
 # v_i = X1*exp(-ti*X5) + X2*exp(-(ti-X9)^2*X6)
 #       + X3*exp(-(ti-X10)^2*X7) + X4*exp(-(ti-X11)^2*X8) - C_i
-# where ti = (i-1)*0.1 for i = 1..65
+#
+# KEY: In the SIF, the DO loop uses:
+#   IA I-1  I  1    (note: +1, not -1!)
+#   RI RI-1  I-1    → RI-1 = float(I + 1)
+#   RM TI    RI-1  0.1  → TI = (I+1)*0.1
+# So for I=1..65: TI = 0.2, 0.3, ..., 6.6 (not 0.0, 0.1, ..., 6.4)
+#
 # BOUNDS: FR DEFAULT → all variables free
 function osborneb_model(; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
@@ -28,11 +34,12 @@ function osborneb_model(; T = Float64, backend = nothing, kwargs...)
         0.428, 0.292, 0.162, 0.098, 0.054
     ])
 
-    # ti = (i-1)*0.1 for i = 1..65
-    ExaModels.@add_par(c, TI, T[(i-1)*0.1 for i in 1:65])
+    # ti = (i+1)*0.1 for i = 1..65 → 0.2, 0.3, ..., 6.6
+    # (SIF uses IA I-1 I 1, which gives I-1 = I+1, so TI = (I+1)*0.1)
+    ExaModels.@add_par(c, TI, T[(i+1)*0.1 for i in 1:65])
 
-    # v_i = PEXP(X1,X5;ti) + PEXP3(X2,X9,X6;ti) + PEXP3(X3,X10,X7;ti) + PEXP3(X4,X11,X8;ti) - C_i
-    # PEXP(V1,V2;T)    = V1 * exp(-T*V2)
+    # v_i = PEXP(X1,X5;TI) + PEXP3(X2,X9,X6;TI) + PEXP3(X3,X10,X7;TI) + PEXP3(X4,X11,X8;TI) - C_i
+    # PEXP(V1,V2;T)      = V1 * exp(-T*V2)
     # PEXP3(V1,V2,V3;T3) = V1 * exp(-(T3-V2)^2 * V3)
     # contribution = v_i^2 (L2 group type, no scale)
     ExaModels.@add_obj(c,
