@@ -143,7 +143,15 @@ include("WOODS.jl")
 include("BROWNBS.jl")
 include("SINQUAD.jl")
 include("DIXMAANA.jl")
+include("DIXMAANB.jl")
+include("DIXMAANC.jl")
+include("DIXMAAND.jl")
+include("DIXMAANE.jl")
+include("BIGGS3.jl")
+include("BIGGS5.jl")
 include("BIGGS6.jl")
+include("BOX2.jl")
+include("BOX3.jl")
 include("HATFLDB.jl")
 include("SCHMVETT.jl")
 include("BDQRTIC.jl")
@@ -180,6 +188,8 @@ include("PENALTY2.jl")
 include("FLETCHBV.jl")
 include("QUARTC.jl")
 include("EXPLIN.jl")
+include("EXPLIN2.jl")
+include("GENROSE.jl")
 include("ARGAUSS.jl")
 include("ARGLINA.jl")
 include("HATFLDC.jl")
@@ -211,6 +221,14 @@ include("SCOSINE.jl")
 include("SINEALI.jl")
 include("S368.jl")
 include("GULF.jl")
+include("CAMEL6.jl")
+include("BRKMCC.jl")
+include("ALLINITU.jl")
+include("BOX2.jl")
+include("BOX3.jl")
+include("BIGGS3.jl")
+include("BIGGS5.jl")
+include("HS70.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -255,10 +273,15 @@ export rosenbr_model,
        engval1_model,
        arwhead_model,
        dixmaana_model,
+       dixmaanb_model,
+       dixmaanc_model,
+       dixmaand_model,
+       dixmaane_model,
        woods_model,
        brownbs_model,
        sinquad_model,
-       biggs6_model,
+       biggs3_model, biggs5_model, biggs6_model,
+       box2_model, box3_model,
        hatfldb_model,
        schmvett_model,
        bdqrtic_model,
@@ -291,7 +314,7 @@ export rosenbr_model,
        mancino_model,
        msqrtals_model,
        penalty1_model, penalty2_model,
-       fletchbv_model, quartc_model, explin_model,
+       fletchbv_model, quartc_model, explin_model, explin2_model, genrose_model,
        argauss_model, arglina_model, hatfldc_model, scurly10_model,
        bdry2_model, hilberta_model,
        brownale_model,
@@ -318,6 +341,14 @@ export rosenbr_model,
        scosine_model,
        sineali_model,
        s368_model,
-       gulf_model
+       gulf_model,
+       camel6_model,
+       brkmcc_model,
+       allinitu_model,
+       box2_model,
+       box3_model,
+       biggs3_model,
+       biggs5_model,
+       hs70_model
 
 end # module ExaCUTEst
