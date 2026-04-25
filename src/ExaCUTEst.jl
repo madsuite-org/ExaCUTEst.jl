@@ -473,10 +473,6 @@ include("HS100MOD.jl")
 include("HS111LNP.jl")
 include("ALLINITA.jl")
 include("ALLINITC.jl")
-include("LUKVLE1.jl")
-include("LUKVLE2.jl")
-include("LUKVLE3.jl")
-include("LUKVLE4.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -751,6 +747,8 @@ export rosenbr_model,
        pfit1_model, pfit1ls_model,
        pfit2_model, pfit2ls_model,
        pfit3_model, pfit3ls_model,
-       pfit4_model, pfit4ls_model
+       pfit4_model, pfit4ls_model,
+       hs100lnp_model, hs100mod_model, hs111lnp_model,
+       allinita_model, allinitc_model
 
 end # module ExaCUTEst
