@@ -20,6 +20,14 @@
 #   v_31 = x[2] - x[1]^2 - 1   (XN G(M) X(2) 1.0; element E(M)=MSQ: -x[1]^2; CONSTANT=1)
 #   contribution = (x[2] - x[1]^2 - 1)^2
 #
+# NOTE: The WATSON.SIF file contains a transcription bug in the MWSQ element's H section:
+#   lines "H V_k V9 = -TWOT_k * T8" for k=2..8 incorrectly use T8 instead of T9.
+#   CUTEst evaluates the function and gradient correctly (F/G sections use T9),
+#   but returns a mathematically inconsistent Hessian for cross-terms H[k,9] (k=2..8).
+#   ExaModels derives the Hessian via auto-diff from the correct function, so the
+#   Hessian check against CUTEst will not pass (error ~2.2 vs tolerance ~0.002).
+#   All other callbacks (nvar, ncon, x0, lvar, uvar, obj, grad) match CUTEst exactly.
+#
 # Precompute polynomial coefficients for each i=1..29:
 #   A[12*(i-1)+j] = t_i^(j-1)         (j=1..12)
 #   D[12*(i-1)+j] = (j-1)*t_i^(j-2)  (j=1..12; D for j=1 is 0)

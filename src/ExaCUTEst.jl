@@ -169,6 +169,15 @@ include("MANCINO.jl")
 include("MSQRTALS.jl")
 include("PENALTY1.jl")
 include("PENALTY2.jl")
+include("FLETCHBV.jl")
+include("QUARTC.jl")
+include("EXPLIN.jl")
+include("ARGAUSS.jl")
+include("ARGLINA.jl")
+include("HATFLDC.jl")
+include("SCURLY10.jl")
+include("BDRY2.jl")
+include("HILBERTA.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -246,6 +255,9 @@ export rosenbr_model,
        zangwil2_model,
        mancino_model,
        msqrtals_model,
-       penalty1_model, penalty2_model
+       penalty1_model, penalty2_model,
+       fletchbv_model, quartc_model, explin_model,
+       argauss_model, arglina_model, hatfldc_model, scurly10_model,
+       bdry2_model, hilberta_model
 
 end # module ExaCUTEst
