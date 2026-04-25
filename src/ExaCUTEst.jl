@@ -163,6 +163,17 @@ include("DIXMAANB.jl")
 include("DIXMAANC.jl")
 include("DIXMAAND.jl")
 include("DIXMAANE.jl")
+include("DIXMAANF.jl")
+include("DIXMAANG.jl")
+include("DIXMAANH.jl")
+include("DIXMAANI.jl")
+include("DIXMAANJ.jl")
+include("DIXMAANK.jl")
+include("DIXMAANL.jl")
+include("DIXMAANM.jl")
+include("DIXMAANN.jl")
+include("DIXMAANO.jl")
+include("DIXMAANP.jl")
 include("BIGGS3.jl")
 include("BIGGS5.jl")
 include("BIGGS6.jl")
@@ -337,6 +348,17 @@ export rosenbr_model,
        dixmaanc_model,
        dixmaand_model,
        dixmaane_model,
+       dixmaanf_model,
+       dixmaang_model,
+       dixmaanh_model,
+       dixmaani_model,
+       dixmaanj_model,
+       dixmaank_model,
+       dixmaanl_model,
+       dixmaanm_model,
+       dixmaann_model,
+       dixmaano_model,
+       dixmaanp_model,
        woods_model,
        brownbs_model,
        sinquad_model,
