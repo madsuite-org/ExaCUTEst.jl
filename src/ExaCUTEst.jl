@@ -193,6 +193,9 @@ include("GENROSE.jl")
 include("ARGAUSS.jl")
 include("ARGLINA.jl")
 include("HATFLDC.jl")
+include("HATFLDD.jl")
+include("HATFLDE.jl")
+include("HATFLDH.jl")
 include("SCURLY10.jl")
 include("BDRY2.jl")
 include("HILBERTA.jl")
@@ -315,7 +318,7 @@ export rosenbr_model,
        msqrtals_model,
        penalty1_model, penalty2_model,
        fletchbv_model, quartc_model, explin_model, explin2_model, genrose_model,
-       argauss_model, arglina_model, hatfldc_model, scurly10_model,
+       argauss_model, arglina_model, hatfldc_model, hatfldd_model, hatflde_model, hatfldh_model, scurly10_model,
        bdry2_model, hilberta_model,
        brownale_model,
        clplatea_model,
