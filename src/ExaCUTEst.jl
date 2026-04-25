@@ -137,6 +137,18 @@ include("WATSON.jl")
 include("WOODS.jl")
 include("BROWNBS.jl")
 include("SINQUAD.jl")
+include("DIXMAANA.jl")
+include("BIGGS6.jl")
+include("HATFLDB.jl")
+include("SCHMVETT.jl")
+include("BDQRTIC.jl")
+include("NONSCOMP.jl")
+include("VARDIM.jl")
+include("FREUROTH.jl")
+include("NONCVXU2.jl")
+include("SPARSQUR.jl")
+include("BROYDN7D.jl")
+include("ENGVAL2.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -182,6 +194,19 @@ export rosenbr_model,
        arwhead_model,
        watson_model,
        dixmaana_model,
-       woods_model
+       woods_model,
+       brownbs_model,
+       sinquad_model,
+       biggs6_model,
+       hatfldb_model,
+       schmvett_model,
+       bdqrtic_model,
+       nonscomp_model,
+       vardim_model,
+       freuroth_model,
+       noncvxu2_model,
+       sparsqur_model,
+       broydn7d_model,
+       engval2_model
 
 end # module ExaCUTEst
