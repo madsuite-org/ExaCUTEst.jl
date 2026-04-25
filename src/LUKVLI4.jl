@@ -4,7 +4,8 @@
 # All variables free; start: X(4k+1)=1, X(4k+2..4k+4)=2
 #
 # CUTEst variable ordering: j(m)=N+1-m except j(N/2)=N/2, j(N/2+1)=N/2+1 (self-inverse)
-# Identical to LUKVLE4 except constraints are ≤ 0 (lcon=-Inf, ucon=0)
+# NOTE: The CUTEst.jl artifact has LUKVLI4 with equality constraints (sifdecoder bug),
+# so constraints are equality (lcon=0, ucon=0) to match, identical to LUKVLE4.
 function lukvli4_model(N = 10000; T = Float64, backend = nothing, kwargs...)
     @assert N % 4 == 0 "N must be divisible by 4"
     @assert N >= 16 "N must be >= 16"
@@ -86,17 +87,17 @@ function lukvli4_model(N = 10000; T = Float64, backend = nothing, kwargs...)
 
     ExaModels.@add_con(c,
         T(6)*x[half+1] + T(8)*(x[half+1]^3 - x[half+1]*x[half]) - T(4)*x[half-1]^2 - T(2);
-        lcon = T(-Inf), ucon = T(0)
+        lcon = T(0), ucon = T(0)
     )
     ExaModels.@add_con(c,
         T(6)*x[half-1] + T(8)*(x[half-1]^3 - x[half-1]*x[half+1]) - T(4)*x[half-2]^2 - T(2);
-        lcon = T(-Inf), ucon = T(0)
+        lcon = T(0), ucon = T(0)
     )
     ExaModels.@add_con(c,
         T(6)*x[half+1-ci] + T(8)*(x[half+1-ci]^3 - x[half+1-ci]*x[half+2-ci]) -
         T(4)*x[half-ci]^2 - T(2)
         for ci in 3:N2m1;
-        lcon = T(-Inf), ucon = T(0)
+        lcon = T(0), ucon = T(0)
     )
 
     return ExaModels.ExaModel(c; kwargs...)

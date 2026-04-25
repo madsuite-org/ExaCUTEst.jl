@@ -89,10 +89,15 @@ for name in ("HAGER1", "HAGER2", "HAGER3")
     end
 end
 
-# LUKVLE5: -param N=10 is rejected by sifdecoder (falls back to N=10000); use N=100 instead.
+# LUKVLE5/LUKVLI5: -param N=10 is rejected by sifdecoder (falls back to N=10000); use N=100 instead.
 let idx = findfirst(m -> m[1] == "LUKVLE5", MODELS)
     if idx !== nothing
         MODELS[idx] = ("LUKVLE5", b -> lukvle5_model(100; backend = b), ("-param", "N=100"))
+    end
+end
+let idx = findfirst(m -> m[1] == "LUKVLI5", MODELS)
+    if idx !== nothing
+        MODELS[idx] = ("LUKVLI5", b -> lukvli5_model(100; backend = b), ("-param", "N=100"))
     end
 end
 
