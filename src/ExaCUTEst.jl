@@ -178,6 +178,9 @@ include("HATFLDC.jl")
 include("SCURLY10.jl")
 include("BDRY2.jl")
 include("HILBERTA.jl")
+include("BROWNALE.jl")
+include("CLPLATEA.jl")
+include("YATP1SQ.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -258,6 +261,9 @@ export rosenbr_model,
        penalty1_model, penalty2_model,
        fletchbv_model, quartc_model, explin_model,
        argauss_model, arglina_model, hatfldc_model, scurly10_model,
-       bdry2_model, hilberta_model
+       bdry2_model, hilberta_model,
+       brownale_model,
+       clplatea_model,
+       yatp1sq_model
 
 end # module ExaCUTEst
