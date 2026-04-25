@@ -97,10 +97,12 @@ include("HS105.jl")
 include("HS106.jl")
 include("HS107.jl")
 include("HS108.jl")
+include("HS109.jl")
 include("HS110.jl")
 include("HS111.jl")
 include("HS112.jl")
 include("HS113.jl")
+include("HS114.jl")
 include("HS116.jl")
 include("HS117.jl")
 include("HS118.jl")
@@ -208,6 +210,7 @@ include("GOTTFR.jl")
 include("SCOSINE.jl")
 include("SINEALI.jl")
 include("S368.jl")
+include("GULF.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -229,8 +232,8 @@ export rosenbr_model,
        hs81_model, hs83_model, hs84_model, hs86_model, hs93_model,
        hs95_model, hs96_model, hs97_model, hs98_model, hs99_model,
        hs100_model, hs101_model, hs102_model, hs103_model,
-       hs104_model, hs105_model, hs106_model, hs107_model, hs108_model, hs110_model, hs111_model, hs112_model,
-       hs113_model, hs116_model, hs117_model, hs118_model, hs119_model,
+       hs104_model, hs105_model, hs106_model, hs107_model, hs108_model, hs109_model, hs110_model, hs111_model, hs112_model,
+       hs113_model, hs114_model, hs116_model, hs117_model, hs118_model, hs119_model,
        byrdsphr_model,
        tame_model, alsotame_model, degdiag_model,
        zangwil3_model, booth_model, himmelbc_model, himmelbd_model, himmelbe_model,
@@ -314,6 +317,7 @@ export rosenbr_model,
        gottfr_model,
        scosine_model,
        sineali_model,
-       s368_model
+       s368_model,
+       gulf_model
 
 end # module ExaCUTEst
