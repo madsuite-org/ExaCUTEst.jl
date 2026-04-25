@@ -386,6 +386,9 @@ include("LISWET9.jl")
 include("LISWET10.jl")
 include("LISWET11.jl")
 include("LISWET12.jl")
+include("GROWTHLS.jl")
+include("NCVXQP.jl")
+include("BOX.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -618,6 +621,11 @@ export rosenbr_model,
        liswet9_model,
        liswet10_model,
        liswet11_model,
-       liswet12_model
+       liswet12_model,
+       growthls_model,
+       ncvxqp1_model, ncvxqp2_model, ncvxqp3_model,
+       ncvxqp4_model, ncvxqp5_model, ncvxqp6_model,
+       ncvxqp7_model, ncvxqp8_model, ncvxqp9_model,
+       box_model
 
 end # module ExaCUTEst
