@@ -296,6 +296,11 @@ include("BROYDNBD.jl")
 include("CLNLBEAM.jl")
 include("CHAIN.jl")
 include("CLPLATEB.jl")
+include("DQRTIC.jl")
+include("DEGTRID.jl")
+include("DEGTRID2.jl")
+include("SCURLY20.jl")
+include("SCURLY30.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -464,6 +469,11 @@ export rosenbr_model,
        broydnbd_model,
        clnlbeam_model,
        chain_model,
-       clplateb_model
+       clplateb_model,
+       dqrtic_model,
+       degtrid_model,
+       degtrid2_model,
+       scurly20_model,
+       scurly30_model
 
 end # module ExaCUTEst
