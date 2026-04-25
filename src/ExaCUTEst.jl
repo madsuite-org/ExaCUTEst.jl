@@ -270,6 +270,14 @@ include("WATSON.jl")
 include("BDEXP.jl")
 include("ARTIF.jl")
 include("FLETCBV3.jl")
+include("EXPQUAD.jl")
+include("QRTQUAD.jl")
+include("OSCIGRNE.jl")
+include("SINROSNB.jl")
+include("NONCVXUN.jl")
+include("CATENA.jl")
+include("CATENARY.jl")
+include("BIGGSB1.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -412,6 +420,14 @@ export rosenbr_model,
        watson_model,
        bdexp_model,
        artif_model,
-       fletcbv3_model
+       fletcbv3_model,
+       expquad_model,
+       qrtquad_model,
+       oscigrne_model,
+       sinrosnb_model,
+       noncvxun_model,
+       catena_model,
+       catenary_model,
+       biggsb1_model
 
 end # module ExaCUTEst
