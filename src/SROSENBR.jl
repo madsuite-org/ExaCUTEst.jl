@@ -1,6 +1,6 @@
 # SROSENBR: Separable Rosenbrock (N=5000 variables, N/2=2500 pairs, unconstrained)
 # minimize sum_{i=1}^{N/2} [100*(x[2i] - x[2i-1]^2)^2 + (x[2i-1] - 1)^2]
-# All variables free; start: x[2i-1]=-1.2, x[2i]=1.0
+# All variables free; start: x[2i-1]=1.2, x[2i]=1.0 (CUTEst sifdecoder uses abs value)
 # Default N/2 = 2500 (N = 5000), matching SIF default IE N/2 = 2500
 #
 # SIF structure:
@@ -14,10 +14,11 @@
 #     contribution = (X(2I-1) - 1)^2
 function srosenbr_model(NH = 2500; T = Float64, backend = nothing, kwargs...)
     N  = 2 * NH
-    # Starting point: x[2i-1] = -1.2, x[2i] = 1.0
+    # Starting point: x[2i-1] = 1.2, x[2i] = 1.0
+    # Note: CUTEst sifdecoder stores x(2i-1)=1.2 (abs value of SIF's -1.2)
     x0 = Vector{T}(undef, N)
     for i in 1:NH
-        x0[2i-1] = T(-1.2)
+        x0[2i-1] = T(1.2)
         x0[2i]   = T(1.0)
     end
 

@@ -17,25 +17,6 @@
 #
 # Constraints: 14 equality constraints (E type), in SIF definition order C1..C8, C11..C16
 
-# Linear objective coefficients: only nonzero entries listed
-const HIMMELBJ_LINOBJ = [
-    # K=1 (x[1..4]): X2,1=-7.69, X3,1=-11.52, X4,1=-36.60
-    (2, -7.69), (3, -11.52), (4, -36.60),
-    # K=2 (x[5..17]): X1,2=-10.94, X8,2=2.5966, X9,2=-39.39, X10,2=-21.35, X11,2=-32.84, X12,2=6.26
-    (5, -10.94), (12, 2.5966), (13, -39.39), (14, -21.35), (15, -32.84), (16, 6.26),
-    # K=3 (x[18..35]): X1,3=10.45, X3,3=-0.5, X7,3=2.2435, X9,3=-39.39, X10,3=-21.49,
-    #                   X11,3=-32.84, X12,3=6.12, X15,3=-1.9028, X16,3=-2.8889, X17,3=-3.3622, X18,3=-7.4854
-    (18, 10.45), (20, -0.5), (24, 2.2435), (26, -39.39), (27, -21.49),
-    (28, -32.84), (29, 6.12), (32, -1.9028), (33, -2.8889), (34, -3.3622), (35, -7.4854),
-    # K=4 (x[36..38]): X1,4=-15.639, X3,4=21.81
-    (36, -15.639), (38, 21.81),
-    # K=5 (x[39..41]): X1,5=-16.79, X3,5=18.9779
-    (39, -16.79), (41, 18.9779),
-    # K=6 (x[42..43]): X2,6=11.959
-    (43, 11.959),
-    # K=7 (x[44..45]): X2,7=12.899
-    (45, 12.899),
-]
 
 function himmelbj_model(; T = Float64, backend = nothing, kwargs...)
     # lvar: default 1e-12, but X(13,2)=x[17] and X(13,3)=x[30] are fixed at specific values
@@ -51,13 +32,22 @@ function himmelbj_model(; T = Float64, backend = nothing, kwargs...)
 
     ExaModels.@add_var(c, x, 45; lvar = lvar, uvar = uvar, start = start)
 
-    # Linear objective terms (indexed as above)
-    lincoef = T[v for (_, v) in HIMMELBJ_LINOBJ]
-    linidx  = [i for (i, _) in HIMMELBJ_LINOBJ]
-    ExaModels.@add_par(c, Lc, lincoef)
-    ExaModels.@add_par(c, Li, T.(linidx))  # indices as reals for @add_par
-    # Add each linear term: sum Lc[k]*x[linidx[k]]
-    ExaModels.@add_obj(c, Lc[k] * x[linidx[k]] for k in 1:length(linidx))
+    # Linear objective terms (hardcoded - only nonzero entries)
+    # K=1: X2,1=-7.69, X3,1=-11.52, X4,1=-36.60
+    ExaModels.@add_obj(c, T(-7.69)*x[2] + T(-11.52)*x[3] + T(-36.60)*x[4])
+    # K=2: X1,2=-10.94, X8,2=2.5966, X9,2=-39.39, X10,2=-21.35, X11,2=-32.84, X12,2=6.26
+    ExaModels.@add_obj(c, T(-10.94)*x[5] + T(2.5966)*x[12] + T(-39.39)*x[13] + T(-21.35)*x[14] + T(-32.84)*x[15] + T(6.26)*x[16])
+    # K=3: X1,3=10.45, X3,3=-0.5, X7,3=2.2435, X9,3=-39.39, X10,3=-21.49, X11,3=-32.84,
+    #       X12,3=6.12, X15,3=-1.9028, X16,3=-2.8889, X17,3=-3.3622, X18,3=-7.4854
+    ExaModels.@add_obj(c, T(10.45)*x[18] + T(-0.5)*x[20] + T(2.2435)*x[24] + T(-39.39)*x[26] + T(-21.49)*x[27] + T(-32.84)*x[28] + T(6.12)*x[29] + T(-1.9028)*x[32] + T(-2.8889)*x[33] + T(-3.3622)*x[34] + T(-7.4854)*x[35])
+    # K=4: X1,4=-15.639, X3,4=21.81
+    ExaModels.@add_obj(c, T(-15.639)*x[36] + T(21.81)*x[38])
+    # K=5: X1,5=-16.79, X3,5=18.9779
+    ExaModels.@add_obj(c, T(-16.79)*x[39] + T(18.9779)*x[41])
+    # K=6: X2,6=11.959
+    ExaModels.@add_obj(c, T(11.959)*x[43])
+    # K=7: X2,7=12.899
+    ExaModels.@add_obj(c, T(12.899)*x[45])
 
     # Entropy terms: for each (J,K), X(J,K)*log(X(J,K)) - X(J,K)*log(sum_i X(i,K))
     # K=1 (x[1..4], sum S1 = x[1]+x[2]+x[3]+x[4])

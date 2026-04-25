@@ -166,6 +166,7 @@ include("TESTQUAD.jl")
 include("TOINTGSS.jl")
 include("ZANGWIL2.jl")
 include("MANCINO.jl")
+include("MSQRTALS.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -241,6 +242,7 @@ export rosenbr_model,
        testquad_model,
        tointgss_model,
        zangwil2_model,
-       mancino_model
+       mancino_model,
+       msqrtals_model
 
 end # module ExaCUTEst

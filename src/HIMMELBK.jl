@@ -46,34 +46,10 @@ function himmelbk_model(; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_con(c, sum(x[k] for k in 1:24) - T(1.0))
 
     # Nonlinear constraints CA(I) in CUTEst order: [3,4,5,6,7,8,9,10,11,12,2,1]
-    # For a given CA(I):
-    #   sum_{J=1}^{12} 40*B[I]/B[J] * x[I+12] * x[J]
-    # + sum_{J=13}^{24} (-C[I]*B[I+12]/B[J]) * x[I] * x[J]
-    #
-    # Build coefficient arrays indexed by constraint slot k=1..12 (CUTEst order)
-    # slot k → SIF index i_sif via: ord = [3,4,5,6,7,8,9,10,11,12,2,1]
-    ord = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 2, 1]
-    # cf1[k, j] = 40 * B[ord[k]] / B[j]        for j=1..12  (12 terms)
-    # cf2[k, j] = -C[ord[k]] * B[ord[k]+12] / B[j+12]  for j=1..12  (i.e. J=13..24)
-    cf1 = T[40 * B[ord[k]] / B[j]                for k in 1:12, j in 1:12]
-    cf2 = T[-C[ord[k]] * B[ord[k]+12] / B[j+12]  for k in 1:12, j in 1:12]
-    ExaModels.@add_par(c, c1, vec(cf1))  # c1[(k-1)*12+j]
-    ExaModels.@add_par(c, c2, vec(cf2))  # c2[(k-1)*12+j]
-
-    # Map slot k → SIF variable index i for x[i] and x[i+12]
-    # ord[k] gives the SIF constraint index I; x[I+12] is the first factor in part1
-    # and x[I] is the first factor in part2
-    ord_arr = T.(ord)
-    ExaModels.@add_par(c, ordp, ord_arr)
-
-    # Add 12 nonlinear constraints (one per slot k), vectorized:
-    # con_k = sum_{j=1}^{12} c1[(k-1)*12+j] * x[ord[k]+12] * x[j]
-    #       + sum_{j=1}^{12} c2[(k-1)*12+j] * x[ord[k]]    * x[j+12]
-    # We need x[ord[k]+12] and x[ord[k]] inside the loop - these require integer indexing
-    # Since ord is a fixed array, we can unroll using a Julia for-loop:
-    for k in 1:12
-        i_sif = ord[k]  # SIF constraint index
-        cf1_k = T[40 * B[i_sif] / B[j] for j in 1:12]
+    # For CA(I): sum_{J=1}^{12} 40*B[I]/B[J] * x[I+12]*x[J]
+    #          + sum_{J=13}^{24} (-C[I]*B[I+12]/B[J]) * x[I]*x[J]
+    for i_sif in [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 2, 1]
+        cf1_k = T[40 * B[i_sif] / B[j]           for j in 1:12]
         cf2_k = T[-C[i_sif] * B[i_sif+12] / B[j+12] for j in 1:12]
         ExaModels.@add_par(c, cf1k, cf1_k)
         ExaModels.@add_par(c, cf2k, cf2_k)
