@@ -34,6 +34,22 @@ let idx = findfirst(m -> m[1] == "VARDIM", MODELS)
     end
 end
 
+# MANCINO: dense inner sum of N terms; NTuple{N,...} Hessian sparsity scales O(N²).
+# Use N=10 (smallest SIF variant) to keep compilation within CI time limits.
+let idx = findfirst(m -> m[1] == "MANCINO", MODELS)
+    if idx !== nothing
+        MODELS[idx] = ("MANCINO", b -> mancino_model(10; backend = b), ("-param", "N=10"))
+    end
+end
+
+# MSQRTALS: matrix square root, inner sum of P terms; scales O(P²) in compilation.
+# Use P=7 (n=49 vars, a listed SIF variant) to keep compilation within CI time limits.
+let idx = findfirst(m -> m[1] == "MSQRTALS", MODELS)
+    if idx !== nothing
+        MODELS[idx] = ("MSQRTALS", b -> msqrtals_model(7; backend = b), ("-param", "P=7"))
+    end
+end
+
 # ── Callback test against CUTEst reference ───────────────────────────────────────
 function test_cutest_callbacks(cutest_name, build_model, cutest_args = ())
     ref = CUTEstModel(cutest_name, cutest_args...)
