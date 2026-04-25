@@ -149,6 +149,11 @@ include("NONCVXU2.jl")
 include("SPARSQUR.jl")
 include("BROYDN7D.jl")
 include("ENGVAL2.jl")
+include("CRAGGLVY.jl")
+include("MOREBV.jl")
+include("GENHUMPS.jl")
+include("HIMMELBI.jl")
+include("HIMMELBJ.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -207,6 +212,11 @@ export rosenbr_model,
        noncvxu2_model,
        sparsqur_model,
        broydn7d_model,
-       engval2_model
+       engval2_model,
+       cragglvy_model,
+       morebv_model,
+       genhumps_model,
+       himmelbi_model,
+       himmelbj_model
 
 end # module ExaCUTEst
