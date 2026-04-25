@@ -69,6 +69,7 @@ include("HS63.jl")
 include("HS64.jl")
 include("HS65.jl")
 include("HS66.jl")
+include("HS67.jl")
 include("HS68.jl")
 include("HS69.jl")
 include("HS71.jl")
@@ -316,6 +317,12 @@ include("LUKVLE7.jl")
 include("LUKVLE8.jl")
 include("LUKVLE9.jl")
 include("LUKVLE10.jl")
+include("BRATU1D.jl")
+include("BRATU2D.jl")
+include("BRATU2DT.jl")
+include("LIARWHD.jl")
+include("SINEVAL.jl")
+include("SPARSINE.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -332,7 +339,7 @@ export rosenbr_model,
        hs56_model, hs57_model, hs59_model,
        hs60_model, hs61_model, hs62_model, hs63_model, hs64_model,
        hs65_model, hs66_model,
-       hs68_model, hs69_model,
+       hs67_model, hs68_model, hs69_model,
        hs71_model, hs72_model, hs73_model, hs74_model, hs75_model,
        hs76_model, hs77_model, hs78_model, hs79_model, hs80_model,
        hs81_model, hs83_model, hs84_model, hs86_model, hs93_model,
@@ -502,6 +509,12 @@ export rosenbr_model,
        lukvle7_model,
        lukvle8_model,
        lukvle9_model,
-       lukvle10_model
+       lukvle10_model,
+       bratu1d_model,
+       bratu2d_model,
+       bratu2dt_model,
+       liarwhd_model,
+       sineval_model,
+       sparsine_model
 
 end # module ExaCUTEst

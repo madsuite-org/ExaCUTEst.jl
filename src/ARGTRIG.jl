@@ -16,8 +16,9 @@ function argtrig_model(N = 200; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = start)
     # No objective (NOR2 classification: feasibility problem)
     # N equality constraints: G(I) = I*(cos(x[I])+sin(x[I])) + sum_j cos(x[j]) - (N+I) = 0
+    # Note: loop variable i is used directly as a numeric multiplier (not wrapped in T())
     ExaModels.@add_con(c,
-        T(i) * (cos(x[i]) + sin(x[i])) + sum(cos(x[j]) for j in 1:N) - T(N + i)
+        i * (cos(x[i]) + sin(x[i])) + sum(cos(x[j]) for j in 1:N) - (N + i)
         for i in 1:N)
     return ExaModels.ExaModel(c; kwargs...)
 end

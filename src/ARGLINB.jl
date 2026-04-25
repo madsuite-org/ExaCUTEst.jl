@@ -21,9 +21,10 @@ function arglinb_model(N = 200, M = 400; T = Float64, backend = nothing, kwargs.
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = T(1))
     # C1 * sum_j sum_k j*k*x[j]*x[k]  (dense 2D quadratic)
-    ExaModels.@add_obj(c, C1 * T(j) * T(k) * x[j] * x[k] for j in 1:N, k in 1:N)
+    # Loop variables j, k used directly as numeric multipliers (not wrapped in T())
+    ExaModels.@add_obj(c, C1 * j * k * x[j] * x[k] for j in 1:N, k in 1:N)
     # -2*C2 * sum_j j*x[j]  (linear)
-    ExaModels.@add_obj(c, T(-2) * C2 * T(j) * x[j] for j in 1:N)
+    ExaModels.@add_obj(c, T(-2) * C2 * j * x[j] for j in 1:N)
     # constant M
     ExaModels.@add_obj(c, T(M) for _ in 1:1)
     return ExaModels.ExaModel(c; kwargs...)
