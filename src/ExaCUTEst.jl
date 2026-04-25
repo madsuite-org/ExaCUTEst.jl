@@ -289,6 +289,13 @@ include("NONCVXUN.jl")
 include("CATENA.jl")
 include("CATENARY.jl")
 include("BIGGSB1.jl")
+include("CURLY10.jl")
+include("CURLY20.jl")
+include("CURLY30.jl")
+include("BROYDNBD.jl")
+include("CLNLBEAM.jl")
+include("CHAIN.jl")
+include("CLPLATEB.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -450,6 +457,13 @@ export rosenbr_model,
        noncvxun_model,
        catena_model,
        catenary_model,
-       biggsb1_model
+       biggsb1_model,
+       curly10_model,
+       curly20_model,
+       curly30_model,
+       broydnbd_model,
+       clnlbeam_model,
+       chain_model,
+       clplateb_model
 
 end # module ExaCUTEst
