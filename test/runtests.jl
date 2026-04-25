@@ -72,6 +72,17 @@ let idx = findfirst(m -> m[1] == "CHEBYQAD", MODELS)
     end
 end
 
+# HAGER1/2/3: default N=2500 makes CUTEst loading slow. Use N=10 (original value).
+for name in ("HAGER1", "HAGER2", "HAGER3")
+    nm = lowercase(name)
+    fn = getfield(ExaCUTEst, Symbol(nm * "_model"))
+    let idx = findfirst(m -> m[1] == name, MODELS)
+        if idx !== nothing
+            MODELS[idx] = (name, b -> fn(10; backend = b), ("-param", "N=10"))
+        end
+    end
+end
+
 # ── Callback test against CUTEst reference ───────────────────────────────────────
 function test_cutest_callbacks(cutest_name, build_model, cutest_args = ())
     ref = CUTEstModel(cutest_name, cutest_args...)

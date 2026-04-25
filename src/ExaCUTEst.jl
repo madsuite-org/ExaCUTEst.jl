@@ -400,6 +400,28 @@ include("CHANDHEU.jl")
 include("DIXCHLNG.jl")
 include("DIXCHLNV.jl")
 include("DEMYMALO.jl")
+include("GIGOMEZ1.jl")
+include("GIGOMEZ2.jl")
+include("GIGOMEZ3.jl")
+include("CLUSTER.jl")
+include("CUBENE.jl")
+include("EXTRASIM.jl")
+include("ERRINROS.jl")
+include("EG1.jl")
+include("EG2.jl")
+include("GROWTH.jl")
+include("HAGER1.jl")
+include("HAGER2.jl")
+include("HAGER3.jl")
+include("MARATOS.jl")
+include("MINMAXRB.jl")
+include("MCCORMCK.jl")
+include("MINMAXBD.jl")
+include("OET1.jl")
+include("OET3.jl")
+include("SNAKE.jl")
+include("SIPOW1.jl")
+include("SIPOW2.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -643,6 +665,14 @@ export rosenbr_model,
        bdvalue_model, bdvalues_model,
        chandheq_model, chandheu_model,
        dixchlng_model, dixchlnv_model,
-       demymalo_model
+       demymalo_model,
+       gigomez1_model, gigomez2_model, gigomez3_model,
+       cluster_model, cubene_model, extrasim_model,
+       errinros_model, eg1_model, eg2_model,
+       growth_model,
+       hager1_model, hager2_model, hager3_model,
+       maratos_model, minmaxrb_model, mccormck_model, minmaxbd_model,
+       oet1_model, oet3_model,
+       snake_model, sipow1_model, sipow2_model
 
 end # module ExaCUTEst
