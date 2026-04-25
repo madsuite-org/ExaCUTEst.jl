@@ -447,6 +447,22 @@ include("HS35MOD.jl")
 include("HS44NEW.jl")
 include("HS76I.jl")
 include("HONG.jl")
+include("HATFLDG.jl")
+include("MDHOLE.jl")
+include("MISTAKE.jl")
+include("LOTSCHD.jl")
+include("ALLINIT.jl")
+include("OPTCNTRL.jl")
+include("AVGASA.jl")
+include("AVGASB.jl")
+include("PFIT1.jl")
+include("PFIT1LS.jl")
+include("PFIT2.jl")
+include("PFIT2LS.jl")
+include("PFIT3.jl")
+include("PFIT3LS.jl")
+include("PFIT4.jl")
+include("PFIT4LS.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -708,6 +724,14 @@ export rosenbr_model,
        powellbs_model, pspdoc_model,
        hart6_model, hairy_model,
        hs3mod_model, hs21mod_model, hs35i_model, hs35mod_model,
-       hs44new_model, hs76i_model, hong_model
+       hs44new_model, hs76i_model, hong_model,
+       hatfldg_model, mdhole_model,
+       mistake_model,
+       lotschd_model, allinit_model, optcntrl_model,
+       avgasa_model, avgasb_model,
+       pfit1_model, pfit1ls_model,
+       pfit2_model, pfit2ls_model,
+       pfit3_model, pfit3ls_model,
+       pfit4_model, pfit4ls_model
 
 end # module ExaCUTEst
