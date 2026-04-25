@@ -299,8 +299,15 @@ include("CLPLATEB.jl")
 include("DQRTIC.jl")
 include("DEGTRID.jl")
 include("DEGTRID2.jl")
+include("DEGTRIDL.jl")
+include("ARGTRIG.jl")
+include("ARGLINB.jl")
+include("ARGLINC.jl")
 include("SCURLY20.jl")
 include("SCURLY30.jl")
+include("FLETCHCR.jl")
+include("GENHS28.jl")
+include("GILBERT.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -473,7 +480,14 @@ export rosenbr_model,
        dqrtic_model,
        degtrid_model,
        degtrid2_model,
+       degtridl_model,
+       argtrig_model,
+       arglinb_model,
+       arglinc_model,
        scurly20_model,
-       scurly30_model
+       scurly30_model,
+       fletchcr_model,
+       genhs28_model,
+       gilbert_model
 
 end # module ExaCUTEst
