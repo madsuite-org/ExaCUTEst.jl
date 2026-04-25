@@ -1,6 +1,7 @@
 module ExaCUTEst
 
 using ExaModels
+using SpecialFunctions
 
 include("ROSENBR.jl")
 include("HS1.jl")
@@ -68,6 +69,8 @@ include("HS63.jl")
 include("HS64.jl")
 include("HS65.jl")
 include("HS66.jl")
+include("HS68.jl")
+include("HS69.jl")
 include("HS71.jl")
 include("HS72.jl")
 include("HS73.jl")
@@ -308,6 +311,11 @@ include("SCURLY30.jl")
 include("FLETCHCR.jl")
 include("GENHS28.jl")
 include("GILBERT.jl")
+include("LUKVLE6.jl")
+include("LUKVLE7.jl")
+include("LUKVLE8.jl")
+include("LUKVLE9.jl")
+include("LUKVLE10.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -324,6 +332,7 @@ export rosenbr_model,
        hs56_model, hs57_model, hs59_model,
        hs60_model, hs61_model, hs62_model, hs63_model, hs64_model,
        hs65_model, hs66_model,
+       hs68_model, hs69_model,
        hs71_model, hs72_model, hs73_model, hs74_model, hs75_model,
        hs76_model, hs77_model, hs78_model, hs79_model, hs80_model,
        hs81_model, hs83_model, hs84_model, hs86_model, hs93_model,
@@ -488,6 +497,11 @@ export rosenbr_model,
        scurly30_model,
        fletchcr_model,
        genhs28_model,
-       gilbert_model
+       gilbert_model,
+       lukvle6_model,
+       lukvle7_model,
+       lukvle8_model,
+       lukvle9_model,
+       lukvle10_model
 
 end # module ExaCUTEst

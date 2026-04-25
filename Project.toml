@@ -5,6 +5,7 @@ authors = ["Sungho Shin <sushin@mit.edu>"]
 
 [deps]
 ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [sources]
 ExaModels = {rev = "main", url = "https://github.com/exanauts/ExaModels.jl.git"}
@@ -12,14 +13,15 @@ ExaModels = {rev = "main", url = "https://github.com/exanauts/ExaModels.jl.git"}
 [compat]
 ExaModels = "0.10"
 Printf = "1.11.0"
+SpecialFunctions = "2.7.2"
 
 [extras]
 CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [targets]
 test = ["CUTEst", "LinearAlgebra", "NLPModels", "SparseArrays", "Test", "Printf"]
