@@ -17,6 +17,11 @@
 #   C(K+1): -5*x[K+4] + x[K+2]^2 - 6 = 0
 #
 # Start: x[i] = 10.0 if mod(i,3)==1, 7.0 if mod(i,3)==2, -3.0 if mod(i,3)==0
+#
+# NOTE: CUTEst's sifdecoder applies a pervasive variable swap across ~2220 positions
+# (every pair (3m+1, 3m+3) for m=1,3,5,...) due to stale SIF parameter K+2 in the
+# ELEMENT USES loop. This causes x0 differences and incorrect constraint/gradient values.
+# The current implementation does NOT apply these swaps and will FAIL the CUTEst test.
 function lukvle14_model(N = 9998; T = Float64, backend = nothing, kwargs...)
     @assert N % 3 == 2 "N must satisfy N ≡ 2 (mod 3) for LUKVLE14"
     NB = (N - 2) ÷ 3  # number of objective group blocks

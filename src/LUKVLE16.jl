@@ -39,7 +39,7 @@ function lukvle16_model(N = 9997; T = Float64, backend = nothing, kwargs...)
     # Constraints in CUTEst sequential order j=1..NC:
     #   j≡1 mod 3: x[j]^2 + 3*x[j+1] - 4 = 0
     #   j≡2 mod 3: x[j+1]^2 + x[j+2] - 2*x[j+3] = 0
-    #   j≡0 mod 3: x[j-1]^2 - x[j+1] = 0
+    #   j≡0 mod 3: x[j-1]^2 - x[j+2] = 0
     #
     # j=1 (j≡1 mod 3): x[1]^2 + 3*x[2] - 4 (scalar, avoids j-1=0 issue in j≡0 term)
     ExaModels.@add_con(c, x[1]^2 + T(3) * x[2] - T(4))
@@ -59,11 +59,11 @@ function lukvle16_model(N = 9997; T = Float64, backend = nothing, kwargs...)
     # j = i+1:
     #   ps1: x[j]^2 + 3*x[j+1] - 4 = x[i+1]^2 + 3*x[i+2] - 4
     #   ps2: x[j+1]^2 + x[j+2] - 2*x[j+3] = x[i+2]^2 + x[i+3] - 2*x[i+4]
-    #   ps3: x[j-1]^2 - x[j+1] = x[i]^2 - x[i+2]
+    #   ps3: x[j-1]^2 - x[j+2] = x[i]^2 - x[i+3]   (j≡0: K+2=j, K+1=j-1=i, K+4=j+2=i+3)
     ExaModels.@add_con(c,
         ps1[i] * (x[i+1]^2 + T(3) * x[i+2] - T(4)) +
         ps2[i] * (x[i+2]^2 + x[i+3] - T(2) * x[i+4]) +
-        ps3[i] * (x[i]^2 - x[i+2])
+        ps3[i] * (x[i]^2 - x[i+3])
         for i in 1:NC-1)
 
     return ExaModels.ExaModel(c; kwargs...)

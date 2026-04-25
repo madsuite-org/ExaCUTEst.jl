@@ -343,6 +343,11 @@ include("SCURLY30.jl")
 include("FLETCHCR.jl")
 include("GENHS28.jl")
 include("GILBERT.jl")
+include("LUKVLE1.jl")
+include("LUKVLE2.jl")
+include("LUKVLE3.jl")
+include("LUKVLE4.jl")
+include("LUKVLE5.jl")
 include("LUKVLE6.jl")
 include("LUKVLE7.jl")
 include("LUKVLE8.jl")
@@ -463,6 +468,15 @@ include("PFIT3.jl")
 include("PFIT3LS.jl")
 include("PFIT4.jl")
 include("PFIT4LS.jl")
+include("HS100LNP.jl")
+include("HS100MOD.jl")
+include("HS111LNP.jl")
+include("ALLINITA.jl")
+include("ALLINITC.jl")
+include("LUKVLE1.jl")
+include("LUKVLE2.jl")
+include("LUKVLE3.jl")
+include("LUKVLE4.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -653,6 +667,11 @@ export rosenbr_model,
        fletchcr_model,
        genhs28_model,
        gilbert_model,
+       lukvle1_model,
+       lukvle2_model,
+       lukvle3_model,
+       lukvle4_model,
+       lukvle5_model,
        lukvle6_model,
        lukvle7_model,
        lukvle8_model,

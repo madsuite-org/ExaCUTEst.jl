@@ -38,10 +38,27 @@ function lukvle12_model(N = 9997; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = start)
 
-    # Objective: with J+1=4I-3, J+2=4I-2, J+3=4I-1, J+4=4I, J+5=4I+1
-    ExaModels.@add_obj(c, (x[4i-3] - x[4i-2])^2 for i in 1:NB)
+    # Objective: J+1=4I-3, J+2=4I-2, J+3=4I-1, J+4=4I, J+5=4I+1
+    # CUTEst swap NC+1 ↔ NC+2 affects I_exc = (NC+3)÷4 = 1875 for NC=7497:
+    #   At I_exc: J+2=NC+1 → use x[NC+2]; J+3=NC+2 → use x[NC+1]
+    #   OBJ1(I_exc): (x[4*I_exc-3] - x[NC+2])^2
+    #   OBJ3(I_exc): (x[NC+1] - x[4*I_exc])^4
+    I_exc = (NC + 3) ÷ 4
+
+    # OBJ1: exception at I_exc (4I-2=NC+1 → use x[NC+2])
+    ExaModels.@add_obj(c, (x[4*I_exc-3] - x[NC+2])^2)
+    ExaModels.@add_obj(c, (x[4i-3] - x[4i-2])^2 for i in 1:I_exc-1)
+    ExaModels.@add_obj(c, (x[4i-3] - x[4i-2])^2 for i in I_exc+1:NB)
+
+    # OBJ2: (4I-2=NC+1 and 4I-1=NC+2 at I=I_exc, but (x[NC+2]-x[NC+1])^2=(x[NC+1]-x[NC+2])^2)
     ExaModels.@add_obj(c, (x[4i-2] - x[4i-1])^2 for i in 1:NB)
-    ExaModels.@add_obj(c, (x[4i-1] - x[4i])^4 for i in 1:NB)
+
+    # OBJ3: exception at I_exc (4I-1=NC+2 → use x[NC+1])
+    ExaModels.@add_obj(c, (x[NC+1] - x[4*I_exc])^4)
+    ExaModels.@add_obj(c, (x[4i-1] - x[4i])^4 for i in 1:I_exc-1)
+    ExaModels.@add_obj(c, (x[4i-1] - x[4i])^4 for i in I_exc+1:NB)
+
+    # OBJ4: no exceptions (4I hits NC+1 only for non-integer I)
     ExaModels.@add_obj(c, (x[4i] - x[4i+1])^4 for i in 1:NB)
 
     # Constraints: produce in interleaved order j=1..NC.
