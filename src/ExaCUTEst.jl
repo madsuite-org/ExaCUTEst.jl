@@ -422,6 +422,31 @@ include("OET3.jl")
 include("SNAKE.jl")
 include("SIPOW1.jl")
 include("SIPOW2.jl")
+include("STANCMIN.jl")
+include("SINVALNE.jl")
+include("ROSENMMX.jl")
+include("POLAK1.jl")
+include("POLAK2.jl")
+include("POLAK3.jl")
+include("POLAK4.jl")
+include("POLAK5.jl")
+include("POLAK6.jl")
+include("SIPOW3.jl")
+include("SIPOW4.jl")
+include("SPIRAL.jl")
+include("TWOBARS.jl")
+include("RECIPE.jl")
+include("POWELLBS.jl")
+include("PSPDOC.jl")
+include("HART6.jl")
+include("HAIRY.jl")
+include("HS3MOD.jl")
+include("HS21MOD.jl")
+include("HS35I.jl")
+include("HS35MOD.jl")
+include("HS44NEW.jl")
+include("HS76I.jl")
+include("HONG.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -673,6 +698,16 @@ export rosenbr_model,
        hager1_model, hager2_model, hager3_model,
        maratos_model, minmaxrb_model, mccormck_model, minmaxbd_model,
        oet1_model, oet3_model,
-       snake_model, sipow1_model, sipow2_model
+       snake_model, sipow1_model, sipow2_model,
+       stancmin_model, sinvalne_model,
+       rosenmmx_model,
+       polak1_model, polak2_model, polak3_model,
+       polak4_model, polak5_model, polak6_model,
+       sipow3_model, sipow4_model,
+       spiral_model, twobars_model, recipe_model,
+       powellbs_model, pspdoc_model,
+       hart6_model, hairy_model,
+       hs3mod_model, hs21mod_model, hs35i_model, hs35mod_model,
+       hs44new_model, hs76i_model, hong_model
 
 end # module ExaCUTEst

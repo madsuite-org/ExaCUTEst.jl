@@ -9,13 +9,11 @@
 #   OBJ3(I): (x[J+3] - x[J+4])^4                (L4)
 #   OBJ4(I): (x[J+4] - x[J+5])^4                (L4)
 #
-# ELEMENT TYPES:
-#   SQR(V) = V^2
+# Constraints: C(j) for j=1..NC (sequential, each constraint C(j) uses x[j..j+2]):
+#   C(j): x[j]^2 + 2*x[j+1] + 3*x[j+2] - 6 = 0
 #
-# For K=1,4,...,NC-2 (step 3), K=3m-2 for m=1..NB:
-#   C(K):   x[K]^2 + 2*x[K+1] + 3*x[K+2] - 6 = 0
-#   C(K+1): x[K+1]^2 + 2*x[K+2] + 3*x[K+3] - 6 = 0
-#   C(K+2): x[K+2]^2 + 2*x[K+3] + 3*x[K+4] - 6 = 0
+# Note: The 3 SIF types C(K), C(K+1), C(K+2) for K=3m-2 all reduce to
+# the same formula x[j]^2 + 2*x[j+1] + 3*x[j+2] - 6 in terms of j.
 #
 # Start: x[i] = 35.0 if mod(i,4)==1, 11.0 if mod(i,4)==2,
 #               5.0 if mod(i,4)==3, -5.0 if mod(i,4)==0
@@ -39,24 +37,9 @@ function lukvle15_model(N = 9997; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_obj(c, (x[4i-1] - x[4i])^4 for i in 1:NB)
     ExaModels.@add_obj(c, (x[4i] - x[4i+1])^4 for i in 1:NB)
 
-    # Constraints: K=3m-2 for m=1..NB
-    # E(K)=SQR(X(K)), E(K+1)=SQR(X(K+1)), E(K+2)=SQR(X(K+2))
-    # C(K):   x[K]^2 + 2*x[K+1] + 3*x[K+2] - 6 = 0
-    # C(K+1): x[K+1]^2 + 2*x[K+2] + 3*x[K+3] - 6 = 0
-    # C(K+2): x[K+2]^2 + 2*x[K+3] + 3*x[K+4] - 6 = 0
-    # With K=3m-2: K+1=3m-1, K+2=3m, K+3=3m+1, K+4=3m+2
-    ExaModels.@add_con(
-        c,
-        x[3m-2]^2 + T(2) * x[3m-1] + T(3) * x[3m] - T(6) for m in 1:NB
-    )
-    ExaModels.@add_con(
-        c,
-        x[3m-1]^2 + T(2) * x[3m] + T(3) * x[3m+1] - T(6) for m in 1:NB
-    )
-    ExaModels.@add_con(
-        c,
-        x[3m]^2 + T(2) * x[3m+1] + T(3) * x[3m+2] - T(6) for m in 1:NB
-    )
+    # Constraints: single formula C(j) = x[j]^2 + 2*x[j+1] + 3*x[j+2] - 6 for j=1..NC
+    # This is equivalent to the 3-type SIF structure since all types reduce to this.
+    ExaModels.@add_con(c, x[j]^2 + T(2) * x[j+1] + T(3) * x[j+2] - T(6) for j in 1:NC)
 
     return ExaModels.ExaModel(c; kwargs...)
 end
