@@ -71,6 +71,19 @@ include("HS72.jl")
 include("HS73.jl")
 include("HS74.jl")
 include("HS75.jl")
+include("HS76.jl")
+include("HS77.jl")
+include("HS78.jl")
+include("HS79.jl")
+include("HS80.jl")
+include("HS81.jl")
+include("HS83.jl")
+include("HS84.jl")
+include("HS86.jl")
+include("HS95.jl")
+include("HS96.jl")
+include("HS97.jl")
+include("HS98.jl")
 include("BYRDSPHR.jl")
 include("TAME.jl")
 include("ALSOTAME.jl")
@@ -102,6 +115,9 @@ export rosenbr_model,
        hs60_model, hs61_model, hs62_model, hs63_model, hs64_model,
        hs65_model, hs66_model,
        hs71_model, hs72_model, hs73_model, hs74_model, hs75_model,
+       hs76_model, hs77_model, hs78_model, hs79_model, hs80_model,
+       hs81_model, hs83_model, hs84_model, hs86_model,
+       hs95_model, hs96_model, hs97_model, hs98_model,
        byrdsphr_model,
        tame_model, alsotame_model, degdiag_model,
        zangwil3_model, booth_model, himmelbc_model, himmelbd_model, himmelbe_model,
