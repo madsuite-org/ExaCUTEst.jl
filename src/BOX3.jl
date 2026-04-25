@@ -3,7 +3,7 @@
 # v_i = exp(-0.1*i*X1) - exp(-0.1*i*X2) + C[i]*X3
 # C[i] = exp(-i) - exp(-0.1*i)
 # BOUNDS: FR DEFAULT (all free)
-function box3_model(M = 100; T = Float64, backend = nothing, kwargs...)
+function box3_model(M = 10; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, 3;
                        lvar = T[-Inf, -Inf, -Inf],

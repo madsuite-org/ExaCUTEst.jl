@@ -120,6 +120,12 @@ include("HIMMELBG.jl")
 include("HIMMELBH.jl")
 include("RSNBRNE.jl")
 include("BT1.jl")
+include("BT10.jl")
+include("BT11.jl")
+include("BT12.jl")
+include("BT13.jl")
+include("CB2.jl")
+include("CB3.jl")
 include("ZECEVIC2.jl")
 include("EXPFIT.jl")
 include("LSQFIT.jl")
@@ -227,11 +233,18 @@ include("GULF.jl")
 include("CAMEL6.jl")
 include("BRKMCC.jl")
 include("ALLINITU.jl")
-include("BOX2.jl")
-include("BOX3.jl")
-include("BIGGS3.jl")
-include("BIGGS5.jl")
 include("HS70.jl")
+include("BT2.jl")
+include("BT3.jl")
+include("BT4.jl")
+include("BT5.jl")
+include("BT6.jl")
+include("BT7.jl")
+include("BT8.jl")
+include("BT9.jl")
+include("CHNRSNBM.jl")
+include("ARWHDNE.jl")
+include("PENTAGON.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -259,7 +272,11 @@ export rosenbr_model,
        tame_model, alsotame_model, degdiag_model,
        zangwil3_model, booth_model, himmelbc_model, himmelbd_model, himmelbe_model,
        himmelbg_model, himmelbh_model,
-       rsnbrne_model, bt1_model, zecevic2_model,
+       rsnbrne_model, bt1_model, bt2_model, bt3_model, bt4_model, bt5_model,
+       bt6_model, bt7_model, bt8_model, bt9_model,
+       bt10_model, bt11_model, bt12_model, bt13_model,
+       cb2_model, cb3_model,
+       zecevic2_model,
        expfit_model, lsqfit_model,
        beale_model, sisser_model, cube_model,
        powellsg_model,
@@ -348,10 +365,9 @@ export rosenbr_model,
        camel6_model,
        brkmcc_model,
        allinitu_model,
-       box2_model,
-       box3_model,
-       biggs3_model,
-       biggs5_model,
-       hs70_model
+       hs70_model,
+       chnrsnbm_model,
+       arwhdne_model,
+       pentagon_model
 
 end # module ExaCUTEst

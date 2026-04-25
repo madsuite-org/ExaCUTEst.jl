@@ -10,9 +10,79 @@
 #     MANC(X; i, j) = sqrt(X^2 + i/j) * (sin^5(log(sqrt(X^2+i/j))) + cos^5(log(sqrt(X^2+i/j))))
 # Objective: sum_i v_i^2
 #
-# Implementation: use one @add_par per group (so inner j-index is concrete, avoiding type explosion)
-# and one scalar @add_obj per group (100 calls in a Julia loop).
-# sum_{j≠i} = sum_{j=1}^N - diagonal_term (since i/i = 1.0 is included in ratios)
+# Implementation: register MANC as a bivariate function with analytic derivatives,
+# so each inner-sum element is a shallow Node2{_manc, Var{Int}, ParameterNode{Int}}.
+# NTuple{100, Node2{_manc,...}} then compiles quickly (shallow uniform element type).
+#
+# Analytic derivatives of MANC(x,r) = v*(S^5+C^5), v=sqrt(x^2+r), L=log(v), S=sin(L), C=cos(L):
+#   f = S^5+C^5, fp = 5*(S^4*C - S*C^4), fpp = 5*((C^2-S^2)*(S^3-C^3) + 3*S^2*C^2*(S+C))
+#   G = f+fp,  K = fp+fpp
+#   ∂/∂x  = G*x/v
+#   ∂/∂r  = G/(2v)
+#   ∂²/∂x² = (G*r + K*x²)/v³
+#   ∂²/∂x∂r = x*(K-G)/(2v³)
+#   ∂²/∂r² = (K-G)/(4v³)
+function _manc(x::Real, r::Real)
+    u = x*x + r
+    v = sqrt(u)
+    L = log(v)
+    S = sin(L); C = cos(L)
+    v * (S^5 + C^5)
+end
+
+function _dmanc_dx(x::Real, r::Real)
+    u = x*x + r; v = sqrt(u); L = log(v)
+    S = sin(L); C = cos(L)
+    S2=S*S; C2=C*C; S4=S2*S2; C4=C2*C2
+    fp = 5*(S4*C - S*C4)
+    G  = (S4*S + C4*C) + fp
+    G * x / v
+end
+
+function _dmanc_dr(x::Real, r::Real)
+    u = x*x + r; v = sqrt(u); L = log(v)
+    S = sin(L); C = cos(L)
+    S2=S*S; C2=C*C; S4=S2*S2; C4=C2*C2
+    fp = 5*(S4*C - S*C4)
+    G  = (S4*S + C4*C) + fp
+    G / (2 * v)
+end
+
+function _d2manc_dx2(x::Real, r::Real)
+    u = x*x + r; v = sqrt(u); L = log(v)
+    S = sin(L); C = cos(L)
+    S2=S*S; C2=C*C; S3=S2*S; C3=C2*C; S4=S3*S; C4=C3*C
+    fp  = 5*(S4*C - S*C4)
+    fpp = 5*((C2-S2)*(S3-C3) + 3*S2*C2*(S+C))
+    G   = (S4*S + C4*C) + fp
+    K   = fp + fpp
+    (G*r + K*x*x) / (v*v*v)
+end
+
+function _d2manc_dxdr(x::Real, r::Real)
+    u = x*x + r; v = sqrt(u); L = log(v)
+    S = sin(L); C = cos(L)
+    S2=S*S; C2=C*C; S3=S2*S; C3=C2*C; S4=S3*S; C4=C3*C
+    fp  = 5*(S4*C - S*C4)
+    fpp = 5*((C2-S2)*(S3-C3) + 3*S2*C2*(S+C))
+    G   = (S4*S + C4*C) + fp
+    K   = fp + fpp
+    x * (K - G) / (2 * v*v*v)
+end
+
+function _d2manc_dr2(x::Real, r::Real)
+    u = x*x + r; v = sqrt(u); L = log(v)
+    S = sin(L); C = cos(L)
+    S2=S*S; C2=C*C; S3=S2*S; C3=C2*C; S4=S3*S; C4=C3*C
+    fp  = 5*(S4*C - S*C4)
+    fpp = 5*((C2-S2)*(S3-C3) + 3*S2*C2*(S+C))
+    G   = (S4*S + C4*C) + fp
+    K   = fp + fpp
+    (K - G) / (4 * v*v*v)
+end
+
+ExaModels.@register_bivariate(_manc, _dmanc_dx, _dmanc_dr, _d2manc_dx2, _d2manc_dxdr, _d2manc_dr2)
+
 function mancino_model(N = 100; T = Float64, backend = nothing, kwargs...)
     ALPHA = 5
     BETA  = T(14.0)
@@ -29,12 +99,10 @@ function mancino_model(N = 100; T = Float64, backend = nothing, kwargs...)
     BETAN2 = BETAN * BETAN
     F0     = AL1 * AL1 * RN1 * RN1
     F2     = BETAN2 - F0
-    F3     = one(T) / F2
-    F4     = BETAN * F3
-    A      = -F4
+    A      = -(BETAN / F2)
 
     # Constant -N/2 = -50.0
-    HNALF  = RN * T(-0.5)
+    HNALF = RN * T(-0.5)
 
     # Precompute CI[i] = (i - N/2)^GAMMA = (i - 50)^3
     CI = T[(T(i) + HNALF)^GAMMA for i in 1:N]
@@ -50,11 +118,8 @@ function mancino_model(N = 100; T = Float64, backend = nothing, kwargs...)
             RJ    = T(j)
             SQI_J = sqrt(RI / RJ)
             LIJ   = log(SQI_J)
-            SIJ   = sin(LIJ)
-            CIJ   = cos(LIJ)
-            SA    = SIJ^ALPHA
-            CA    = CIJ^ALPHA
-            H    += SQI_J * (SA + CA)
+            SIJ   = sin(LIJ); CIJ = cos(LIJ)
+            H    += SQI_J * (SIJ^ALPHA + CIJ^ALPHA)
         end
         x0[i] = A * (H + CI[i])
     end
@@ -62,28 +127,23 @@ function mancino_model(N = 100; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = x0)
 
-    # For each group i: add one @add_par for ratios i/j (j=1..N) and one scalar @add_obj
-    # By using a separate parameter array per group, the inner j-index is just a concrete
-    # integer (not i-dependent), so all SumNode elements share the same expression type.
-    # sum_{j≠i} f(x[j]; i/j) = sum_{j=1..N} f(x[j]; ratios[j]) - f(x[i]; 1.0)
-    # (ratios[j] = i/j for all j including j=i where it equals 1.0)
+    # For each group i: register one parameter array Ri[j] = i/j (j=1..N),
+    # then add scalar objective (one @add_obj per group):
+    #   (BETAN*x[i] + sum_{j=1}^N _manc(x[j],Ri[j]) - _manc(x[i],1) - CI[i])^2
+    # sum(j=1..N) includes the diagonal j=i; the diagonal term _manc(x[i], Ri[i]) = _manc(x[i], 1)
+    # is subtracted explicitly to match sum_{j≠i}.
+    # Each inner-sum element _manc(x[j], Ri[j]) is Node2{_manc, Var{Int}, ParameterNode{Int}}
+    # (depth-1, uniform type), so NTuple{100, Node2{_manc,...}} compiles quickly.
     for i in 1:N
-        ratios_i = T[T(i) / T(j) for j in 1:N]  # length-N ratios for group i
+        ratios_i = T[T(i) / T(j) for j in 1:N]
         ExaModels.@add_par(c, Ri, ratios_i)
         CI_i = CI[i]
         ExaModels.@add_obj(
             c,
             (
                 BETAN * x[i]
-                + sum(
-                    let vij = sqrt(x[j]^2 + Ri[j]);
-                        vij * (sin(log(vij))^ALPHA + cos(log(vij))^ALPHA)
-                    end
-                    for j in 1:N
-                )
-                - (let vii = sqrt(x[i]^2 + T(1));
-                       vii * (sin(log(vii))^ALPHA + cos(log(vii))^ALPHA)
-                   end)
+                + sum(_manc(x[j], Ri[j]) for j in 1:N)
+                - _manc(x[i], T(1))
                 - CI_i
             )^2
         )
