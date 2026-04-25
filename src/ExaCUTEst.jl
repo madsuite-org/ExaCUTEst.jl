@@ -158,6 +158,20 @@ include("PALMER4A.jl")
 include("PALMER4B.jl")
 include("PALMER4C.jl")
 include("PALMER4E.jl")
+include("PALMER5A.jl")
+include("PALMER5B.jl")
+include("PALMER5C.jl")
+include("PALMER5D.jl")
+include("PALMER5E.jl")
+include("PALMER6A.jl")
+include("PALMER6C.jl")
+include("PALMER6E.jl")
+include("PALMER7A.jl")
+include("PALMER7C.jl")
+include("PALMER7E.jl")
+include("PALMER8A.jl")
+include("PALMER8C.jl")
+include("PALMER8E.jl")
 include("CHEBYQAD.jl")
 include("CHNRSBNE.jl")
 include("BEALE.jl")
@@ -395,6 +409,10 @@ export rosenbr_model,
        palmer2a_model, palmer2b_model, palmer2c_model, palmer2e_model,
        palmer3a_model, palmer3b_model, palmer3c_model, palmer3e_model,
        palmer4a_model, palmer4b_model, palmer4c_model, palmer4e_model,
+       palmer5a_model, palmer5b_model, palmer5c_model, palmer5d_model, palmer5e_model,
+       palmer6a_model, palmer6c_model, palmer6e_model,
+       palmer7a_model, palmer7c_model, palmer7e_model,
+       palmer8a_model, palmer8c_model, palmer8e_model,
        chebyqad_model,
        chnrsbne_model,
        beale_model, sisser_model, cube_model,
