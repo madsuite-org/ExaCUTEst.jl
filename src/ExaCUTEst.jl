@@ -259,6 +259,12 @@ include("BT9.jl")
 include("CHNRSNBM.jl")
 include("ARWHDNE.jl")
 include("PENTAGON.jl")
+include("CANTILVR.jl")
+include("HUMPS.jl")
+include("BIGGSC4.jl")
+include("GOFFIN.jl")
+include("MIFFLIN1.jl")
+include("MIFFLIN2.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -390,6 +396,12 @@ export rosenbr_model,
        hs70_model,
        chnrsnbm_model,
        arwhdne_model,
-       pentagon_model
+       pentagon_model,
+       cantilvr_model,
+       humps_model,
+       biggsc4_model,
+       goffin_model,
+       mifflin1_model,
+       mifflin2_model
 
 end # module ExaCUTEst
