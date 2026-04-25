@@ -11,7 +11,7 @@ const BACKENDS = Any[nothing]
 
 # Problems where CUTEst's SIF file contains analytically incorrect Hessian formulas.
 # ExaModels computes the correct Hessian (verified by finite differences).
-const CUTEST_HESSIAN_BUGGY = Set{String}(["GULF"])
+const CUTEST_HESSIAN_BUGGY = Set{String}(["GULF", "WATSON"])
 
 # ── Problem registry (auto-generated from exported *_model symbols) ───────────
 # Symbol → CUTEst name: strip "_model" suffix, uppercase
