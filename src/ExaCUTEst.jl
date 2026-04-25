@@ -127,8 +127,17 @@ include("BT13.jl")
 include("CB2.jl")
 include("CB3.jl")
 include("ZECEVIC2.jl")
+include("ZECEVIC3.jl")
+include("ZECEVIC4.jl")
+include("DQDRTIC.jl")
+include("POWER.jl")
 include("EXPFIT.jl")
 include("LSQFIT.jl")
+include("PALMER1.jl")
+include("PALMER2.jl")
+include("PALMER3.jl")
+include("PALMER4.jl")
+include("CHEBYQAD.jl")
 include("BEALE.jl")
 include("SISSER.jl")
 include("CUBE.jl")
@@ -198,9 +207,12 @@ include("EXPLIN2.jl")
 include("GENROSE.jl")
 include("ARGAUSS.jl")
 include("ARGLINA.jl")
+include("HATFLDA.jl")
 include("HATFLDC.jl")
 include("HATFLDD.jl")
 include("HATFLDE.jl")
+include("HATFLDF.jl")
+include("HATFLDFL.jl")
 include("HATFLDH.jl")
 include("SCURLY10.jl")
 include("BDRY2.jl")
@@ -221,6 +233,7 @@ include("DENSCHNF.jl")
 include("NONDQUAR.jl")
 include("INDEF.jl")
 include("INDEFM.jl")
+include("MADSEN.jl")
 include("MAKELA1.jl")
 include("MAKELA2.jl")
 include("MAKELA3.jl")
@@ -277,7 +290,13 @@ export rosenbr_model,
        bt10_model, bt11_model, bt12_model, bt13_model,
        cb2_model, cb3_model,
        zecevic2_model,
+       zecevic3_model,
+       zecevic4_model,
+       dqdrtic_model,
+       power_model,
        expfit_model, lsqfit_model,
+       palmer1_model, palmer2_model, palmer3_model, palmer4_model,
+       chebyqad_model,
        beale_model, sisser_model, cube_model,
        powellsg_model,
        osbornea_model,
@@ -335,7 +354,7 @@ export rosenbr_model,
        msqrtals_model,
        penalty1_model, penalty2_model,
        fletchbv_model, quartc_model, explin_model, explin2_model, genrose_model,
-       argauss_model, arglina_model, hatfldc_model, hatfldd_model, hatflde_model, hatfldh_model, scurly10_model,
+       argauss_model, arglina_model, hatflda_model, hatfldc_model, hatfldd_model, hatflde_model, hatfldf_model, hatfldfl_model, hatfldh_model, scurly10_model,
        bdry2_model, hilberta_model,
        brownale_model,
        clplatea_model,
@@ -353,6 +372,7 @@ export rosenbr_model,
        nondquar_model,
        indef_model,
        indefm_model,
+       madsen_model,
        makela1_model,
        makela2_model,
        makela3_model,

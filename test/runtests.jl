@@ -50,6 +50,22 @@ let idx = findfirst(m -> m[1] == "MSQRTALS", MODELS)
     end
 end
 
+# POWER: single L2 group with N elements; expansion yields N^2 terms.
+# Default N=10000 (10^8 terms) is impractical. Use N=1000 and override CUTEst.
+let idx = findfirst(m -> m[1] == "POWER", MODELS)
+    if idx !== nothing
+        MODELS[idx] = ("POWER", b -> power_model(1000; backend = b), ("-param", "N=1000"))
+    end
+end
+
+# CHEBYQAD: N groups × N inner-sum terms → O(N^2) Hessian sparsity compilation.
+# Use N=10 ("original value" in SIF) to keep compilation within CI time limits.
+let idx = findfirst(m -> m[1] == "CHEBYQAD", MODELS)
+    if idx !== nothing
+        MODELS[idx] = ("CHEBYQAD", b -> chebyqad_model(10; backend = b), ("-param", "N=10"))
+    end
+end
+
 # ── Callback test against CUTEst reference ───────────────────────────────────────
 function test_cutest_callbacks(cutest_name, build_model, cutest_args = ())
     ref = CUTEstModel(cutest_name, cutest_args...)
