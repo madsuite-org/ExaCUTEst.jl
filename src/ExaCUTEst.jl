@@ -374,6 +374,18 @@ include("MEYER3.jl")
 include("LOGROS.jl")
 include("CSFI1.jl")
 include("CSFI2.jl")
+include("LISWET1.jl")
+include("LISWET2.jl")
+include("LISWET3.jl")
+include("LISWET4.jl")
+include("LISWET5.jl")
+include("LISWET6.jl")
+include("LISWET7.jl")
+include("LISWET8.jl")
+include("LISWET9.jl")
+include("LISWET10.jl")
+include("LISWET11.jl")
+include("LISWET12.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -594,6 +606,18 @@ export rosenbr_model,
        meyer3_model,
        logros_model,
        csfi1_model,
-       csfi2_model
+       csfi2_model,
+       liswet1_model,
+       liswet2_model,
+       liswet3_model,
+       liswet4_model,
+       liswet5_model,
+       liswet6_model,
+       liswet7_model,
+       liswet8_model,
+       liswet9_model,
+       liswet10_model,
+       liswet11_model,
+       liswet12_model
 
 end # module ExaCUTEst
