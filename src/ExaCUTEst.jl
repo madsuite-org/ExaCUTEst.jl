@@ -138,6 +138,7 @@ include("PALMER2.jl")
 include("PALMER3.jl")
 include("PALMER4.jl")
 include("CHEBYQAD.jl")
+include("CHNRSBNE.jl")
 include("BEALE.jl")
 include("SISSER.jl")
 include("CUBE.jl")
@@ -297,6 +298,7 @@ export rosenbr_model,
        expfit_model, lsqfit_model,
        palmer1_model, palmer2_model, palmer3_model, palmer4_model,
        chebyqad_model,
+       chnrsbne_model,
        beale_model, sisser_model, cube_model,
        powellsg_model,
        osbornea_model,

@@ -9,6 +9,7 @@ function hatfldf_model(; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, 3; lvar = T(-Inf), uvar = T(Inf), start = T(0.1))
     ExaModels.@add_par(c, RHS, T[0.032, 0.056, 0.099])
-    ExaModels.@add_con(c, x[1] + x[2] * exp(T(i) * x[3]) - RHS[i] for i in 1:3)
+    ExaModels.@add_par(c, RI, T[1.0, 2.0, 3.0])
+    ExaModels.@add_con(c, x[1] + x[2] * exp(RI[i] * x[3]) - RHS[i] for i in 1:3)
     return ExaModels.ExaModel(c; kwargs...)
 end

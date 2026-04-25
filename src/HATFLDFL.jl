@@ -10,6 +10,7 @@ function hatfldfl_model(; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_var(c, x, 3; lvar = T(-Inf), uvar = T(Inf),
                        start = T[1.2, -1.2, 0.98])
     ExaModels.@add_par(c, RHS, T[0.032, 0.056, 0.099])
-    ExaModels.@add_obj(c, (x[1] + x[2] * x[3]^T(i) - RHS[i])^2 for i in 1:3)
+    ExaModels.@add_par(c, RI, T[1.0, 2.0, 3.0])
+    ExaModels.@add_obj(c, (x[1] + x[2] * x[3]^RI[i] - RHS[i])^2 for i in 1:3)
     return ExaModels.ExaModel(c; kwargs...)
 end
