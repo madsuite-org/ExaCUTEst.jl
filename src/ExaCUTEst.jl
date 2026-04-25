@@ -366,6 +366,14 @@ include("BOXPOWER.jl")
 include("HILBERTB.jl")
 include("SBRYBND.jl")
 include("DIXON3DQ.jl")
+include("MARATOSB.jl")
+include("HIMMELBA.jl")
+include("HIMMELBB.jl")
+include("BROWNAL.jl")
+include("MEYER3.jl")
+include("LOGROS.jl")
+include("CSFI1.jl")
+include("CSFI2.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -578,6 +586,14 @@ export rosenbr_model,
        boxpower_model,
        hilbertb_model,
        sbrybnd_model,
-       dixon3dq_model
+       dixon3dq_model,
+       maratosb_model,
+       himmelba_model,
+       himmelbb_model,
+       brownal_model,
+       meyer3_model,
+       logros_model,
+       csfi1_model,
+       csfi2_model
 
 end # module ExaCUTEst
