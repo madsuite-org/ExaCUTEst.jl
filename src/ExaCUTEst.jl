@@ -153,6 +153,18 @@ include("MOREBV.jl")
 include("GENHUMPS.jl")
 include("HIMMELBI.jl")
 include("HIMMELBJ.jl")
+include("CHNROSNB.jl")
+include("FLETCBV2.jl")
+include("HIMMELBK.jl")
+include("BROWNDEN.jl")
+include("JENSMP.jl")
+include("MEXHAT.jl")
+include("MODBEALE.jl")
+include("OSBORNEB.jl")
+include("SROSENBR.jl")
+include("TESTQUAD.jl")
+include("TOINTGSS.jl")
+include("ZANGWIL2.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -215,6 +227,18 @@ export rosenbr_model,
        morebv_model,
        genhumps_model,
        himmelbi_model,
-       himmelbj_model
+       himmelbj_model,
+       chnrosnb_model,
+       fletcbv2_model,
+       himmelbk_model,
+       brownden_model,
+       jensmp_model,
+       mexhat_model,
+       modbeale_model,
+       osborneb_model,
+       srosenbr_model,
+       testquad_model,
+       tointgss_model,
+       zangwil2_model
 
 end # module ExaCUTEst
