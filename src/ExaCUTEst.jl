@@ -267,6 +267,9 @@ include("MIFFLIN1.jl")
 include("MIFFLIN2.jl")
 include("OSCIPATH.jl")
 include("WATSON.jl")
+include("BDEXP.jl")
+include("ARTIF.jl")
+include("FLETCBV3.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -406,6 +409,9 @@ export rosenbr_model,
        mifflin1_model,
        mifflin2_model,
        oscipath_model,
-       watson_model
+       watson_model,
+       bdexp_model,
+       artif_model,
+       fletcbv3_model
 
 end # module ExaCUTEst
