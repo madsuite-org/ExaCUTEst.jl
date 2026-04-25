@@ -323,6 +323,9 @@ include("BRATU2DT.jl")
 include("LIARWHD.jl")
 include("SINEVAL.jl")
 include("SPARSINE.jl")
+include("BOXPOWER.jl")
+include("HILBERTB.jl")
+include("SBRYBND.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -515,6 +518,9 @@ export rosenbr_model,
        bratu2dt_model,
        liarwhd_model,
        sineval_model,
-       sparsine_model
+       sparsine_model,
+       boxpower_model,
+       hilbertb_model,
+       sbrybnd_model
 
 end # module ExaCUTEst
