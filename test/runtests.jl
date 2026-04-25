@@ -13,16 +13,26 @@ const BACKENDS = Any[nothing]
 # Symbol → CUTEst name: strip "_model" suffix, uppercase
 const MODELS = let
     fns = sort(filter(n -> endswith(string(n), "_model"), names(ExaCUTEst; all=false)))
-    Tuple{String, Function}[
+    # Tuple: (cutest_name, build_model, cutest_args)
+    Tuple{String, Function, Tuple}[
         (uppercase(replace(string(fn), "_model" => "")),
-         let f = getfield(ExaCUTEst, fn); b -> f(; backend = b); end)
+         let f = getfield(ExaCUTEst, fn); b -> f(; backend = b); end,
+         ())
         for fn in fns
     ]
 end
 
+# VARDIM: L4 group requires 4D polynomial expansion; use N=10 ("original value" in SIF)
+# The SIF default N=200 makes the 4D loop (N^4 = 1.6B terms) impractical for ExaModels.
+let idx = findfirst(m -> m[1] == "VARDIM", MODELS)
+    if idx !== nothing
+        MODELS[idx] = ("VARDIM", b -> vardim_model(10; backend = b), ("-param", "N=10"))
+    end
+end
+
 # ── Callback test against CUTEst reference ───────────────────────────────────────
-function test_cutest_callbacks(cutest_name, build_model)
-    ref = CUTEstModel(cutest_name)
+function test_cutest_callbacks(cutest_name, build_model, cutest_args = ())
+    ref = CUTEstModel(cutest_name, cutest_args...)
     try
         nvar = ref.meta.nvar
         ncon = ref.meta.ncon
@@ -85,11 +95,11 @@ end
 # ── Run all ───────────────────────────────────────────────────────────────────────
 @testset "ExaCUTEst" begin
     n = length(MODELS)
-    for (i, (name, build_model)) in enumerate(MODELS)
+    for (i, (name, build_model, cutest_args)) in enumerate(MODELS)
         filled = round(Int, 20 * i / n)
         bar = "[" * "=" ^ filled * " " ^ (20 - filled) * "]"
         print(@sprintf("\r%s %3d/%d  %-12s", bar, i, n, name))
-        test_cutest_callbacks(name, build_model)
+        test_cutest_callbacks(name, build_model, cutest_args)
     end
     println()  # newline after final bar
 end

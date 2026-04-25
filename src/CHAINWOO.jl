@@ -22,8 +22,10 @@ function chainwoo_model(NS = 1999; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     # All variables free (FR CHAINWOO 'DEFAULT')
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = x0)
-    # CONST group: identity group, no variables, constant=1 → v = 0 - 1 = -1 → contributes -1
-    ExaModels.@add_obj(c, T(-1))
+    # CONST group: L2 type (T 'DEFAULT' L2), no variables, constant=1
+    #   v = 0 - 1 = -1 → L2 contribution = v^2 / 1 = (-1)^2 = 1
+    ExaModels.@add_par(c, const_val, T[1.0])
+    ExaModels.@add_obj(c, const_val[i] for i in 1:1)
     # For each set i=1..NS, indices: a=2i-1, b=2i, c_=2i+1, d=2i+2
     # A(i): scale=0.01, v = x[b] + (-x[a]^2) = x[b] - x[a]^2
     #   contribution = v^2 / 0.01 = 100 * v^2
