@@ -141,6 +141,23 @@ include("PALMER1.jl")
 include("PALMER2.jl")
 include("PALMER3.jl")
 include("PALMER4.jl")
+include("PALMER1A.jl")
+include("PALMER1B.jl")
+include("PALMER1C.jl")
+include("PALMER1D.jl")
+include("PALMER1E.jl")
+include("PALMER2A.jl")
+include("PALMER2B.jl")
+include("PALMER2C.jl")
+include("PALMER2E.jl")
+include("PALMER3A.jl")
+include("PALMER3B.jl")
+include("PALMER3C.jl")
+include("PALMER3E.jl")
+include("PALMER4A.jl")
+include("PALMER4B.jl")
+include("PALMER4C.jl")
+include("PALMER4E.jl")
 include("CHEBYQAD.jl")
 include("CHNRSBNE.jl")
 include("BEALE.jl")
@@ -317,6 +334,14 @@ include("LUKVLE7.jl")
 include("LUKVLE8.jl")
 include("LUKVLE9.jl")
 include("LUKVLE10.jl")
+include("LUKVLE11.jl")
+include("LUKVLE12.jl")
+include("LUKVLE13.jl")
+include("LUKVLE14.jl")
+include("LUKVLE15.jl")
+include("LUKVLE16.jl")
+include("LUKVLE17.jl")
+include("LUKVLE18.jl")
 include("BRATU1D.jl")
 include("BRATU2D.jl")
 include("BRATU2DT.jl")
@@ -326,6 +351,7 @@ include("SPARSINE.jl")
 include("BOXPOWER.jl")
 include("HILBERTB.jl")
 include("SBRYBND.jl")
+include("DIXON3DQ.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -365,6 +391,10 @@ export rosenbr_model,
        power_model,
        expfit_model, lsqfit_model,
        palmer1_model, palmer2_model, palmer3_model, palmer4_model,
+       palmer1a_model, palmer1b_model, palmer1c_model, palmer1d_model, palmer1e_model,
+       palmer2a_model, palmer2b_model, palmer2c_model, palmer2e_model,
+       palmer3a_model, palmer3b_model, palmer3c_model, palmer3e_model,
+       palmer4a_model, palmer4b_model, palmer4c_model, palmer4e_model,
        chebyqad_model,
        chnrsbne_model,
        beale_model, sisser_model, cube_model,
@@ -513,6 +543,14 @@ export rosenbr_model,
        lukvle8_model,
        lukvle9_model,
        lukvle10_model,
+       lukvle11_model,
+       lukvle12_model,
+       lukvle13_model,
+       lukvle14_model,
+       lukvle15_model,
+       lukvle16_model,
+       lukvle17_model,
+       lukvle18_model,
        bratu1d_model,
        bratu2d_model,
        bratu2dt_model,
@@ -521,6 +559,7 @@ export rosenbr_model,
        sparsine_model,
        boxpower_model,
        hilbertb_model,
-       sbrybnd_model
+       sbrybnd_model,
+       dixon3dq_model
 
 end # module ExaCUTEst

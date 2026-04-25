@@ -29,7 +29,8 @@ function arglinc_model(N = 200, M = 400; T = Float64, backend = nothing, kwargs.
     ExaModels.@add_obj(c, C1p * j * k * x[j] * x[k] for j in 2:N-1, k in 2:N-1)
     # -2*C2' * sum_{j=2}^{N-1} j*x[j]  (linear, inner variables only)
     ExaModels.@add_obj(c, T(-2) * C2p * j * x[j] for j in 2:N-1)
-    # constant (M-2)
-    ExaModels.@add_obj(c, T(Mp) for _ in 1:1)
+    # constant M: (M-2) active groups each contribute 1 from the -1 term,
+    # plus G(1) and G(M) each contribute (0-1)^2 = 1, so total constant = (M-2) + 2 = M
+    ExaModels.@add_obj(c, T(M) for _ in 1:1)
     return ExaModels.ExaModel(c; kwargs...)
 end

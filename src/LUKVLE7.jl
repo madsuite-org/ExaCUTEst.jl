@@ -22,11 +22,12 @@ function lukvle7_model(N = 10000; T = Float64, backend = nothing, kwargs...)
     #            + N*(N+1)/2
     # (Collected from SIF GROUP USES: CO(i) coeff=-i for all i;
     #  SI(i) coeff=2 for i=1..N-1, coeff=-(N-1) for i=N)
+    # The constant N*(N+1)/2 is distributed evenly across the N cos terms as (N+1)/2 per term.
+    half_Np1 = T(N + 1) / T(2)  # = (N+1)/2 so sum = N*(N+1)/2
     ExaModels.@add_par(c, ipar, T[T(i) for i in 1:N])
-    ExaModels.@add_obj(c, -ipar[i] * cos(x[i]) for i in 1:N)
+    ExaModels.@add_obj(c, -ipar[i] * cos(x[i]) + half_Np1 for i in 1:N)
     ExaModels.@add_obj(c, T(2) * sin(x[i]) for i in 1:N-1)
     ExaModels.@add_obj(c, -T(N - 1) * sin(x[N]))
-    ExaModels.@add_obj(c, T(N) * T(N + 1) / T(2))
 
     # Constraints:
     # C(1): 4*x[1]+x[2] - 4*x[2]^2 - x[3]^2 = 0
