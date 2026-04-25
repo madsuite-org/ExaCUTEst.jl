@@ -133,7 +133,6 @@ include("HS268.jl")
 include("BARD.jl")
 include("ENGVAL1.jl")
 include("ARWHEAD.jl")
-include("WATSON.jl")
 include("WOODS.jl")
 include("BROWNBS.jl")
 include("SINQUAD.jl")
@@ -197,7 +196,6 @@ export rosenbr_model,
        bard_model,
        engval1_model,
        arwhead_model,
-       watson_model,
        dixmaana_model,
        woods_model,
        brownbs_model,
