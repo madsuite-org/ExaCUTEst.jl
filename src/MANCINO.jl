@@ -12,7 +12,8 @@
 #
 # Implementation: register MANC as a bivariate function with analytic derivatives,
 # so each inner-sum element is a shallow Node2{_manc, Var{Int}, ParameterNode{Int}}.
-# NTuple{100, Node2{_manc,...}} then compiles quickly (shallow uniform element type).
+# The Hessian sparsity computation scales O(N²) in the number of inner-sum terms;
+# use N=10 in tests (see test/runtests.jl override) to keep CI times reasonable.
 #
 # Analytic derivatives of MANC(x,r) = v*(S^5+C^5), v=sqrt(x^2+r), L=log(v), S=sin(L), C=cos(L):
 #   f = S^5+C^5, fp = 5*(S^4*C - S*C^4), fpp = 5*((C^2-S^2)*(S^3-C^3) + 3*S^2*C^2*(S+C))
@@ -133,7 +134,7 @@ function mancino_model(N = 100; T = Float64, backend = nothing, kwargs...)
     # sum(j=1..N) includes the diagonal j=i; the diagonal term _manc(x[i], Ri[i]) = _manc(x[i], 1)
     # is subtracted explicitly to match sum_{j≠i}.
     # Each inner-sum element _manc(x[j], Ri[j]) is Node2{_manc, Var{Int}, ParameterNode{Int}}
-    # (depth-1, uniform type), so NTuple{100, Node2{_manc,...}} compiles quickly.
+    # (depth-1, uniform type). Compilation scales O(N²); use small N in tests.
     for i in 1:N
         ratios_i = T[T(i) / T(j) for j in 1:N]
         ExaModels.@add_par(c, Ri, ratios_i)
