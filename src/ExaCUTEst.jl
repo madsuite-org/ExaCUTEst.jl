@@ -356,11 +356,32 @@ include("LUKVLE10.jl")
 include("LUKVLE11.jl")
 include("LUKVLE12.jl")
 include("LUKVLE13.jl")
-include("LUKVLE14.jl")
+# LUKVLE14.jl excluded: CUTEst sifdecoder applies pervasive variable swaps (~2220 positions)
+# that cannot be replicated. Nearly all callbacks fail. Re-enable when the swap is decoded.
+# include("LUKVLE14.jl")
 include("LUKVLE15.jl")
 include("LUKVLE16.jl")
 include("LUKVLE17.jl")
 include("LUKVLE18.jl")
+include("LUKVLI1.jl")
+include("LUKVLI2.jl")
+include("LUKVLI3.jl")
+include("LUKVLI4.jl")
+include("LUKVLI5.jl")
+include("LUKVLI6.jl")
+include("LUKVLI7.jl")
+include("LUKVLI8.jl")
+include("LUKVLI9.jl")
+include("LUKVLI10.jl")
+include("LUKVLI11.jl")
+include("LUKVLI12.jl")
+include("LUKVLI13.jl")
+# LUKVLI14.jl excluded: same sifdecoder variable-swap issue as LUKVLE14.
+# include("LUKVLI14.jl")
+include("LUKVLI15.jl")
+include("LUKVLI16.jl")
+include("LUKVLI17.jl")
+include("LUKVLI18.jl")
 include("BRATU1D.jl")
 include("BRATU2D.jl")
 include("BRATU2DT.jl")
@@ -676,11 +697,29 @@ export rosenbr_model,
        lukvle11_model,
        lukvle12_model,
        lukvle13_model,
-       lukvle14_model,
+       # lukvle14_model excluded (sifdecoder variable swaps)
        lukvle15_model,
        lukvle16_model,
        lukvle17_model,
        lukvle18_model,
+       lukvli1_model,
+       lukvli2_model,
+       lukvli3_model,
+       lukvli4_model,
+       lukvli5_model,
+       lukvli6_model,
+       lukvli7_model,
+       lukvli8_model,
+       lukvli9_model,
+       lukvli10_model,
+       lukvli11_model,
+       lukvli12_model,
+       lukvli13_model,
+       # lukvli14_model excluded (same sifdecoder variable-swap issue)
+       lukvli15_model,
+       lukvli16_model,
+       lukvli17_model,
+       lukvli18_model,
        bratu1d_model,
        bratu2d_model,
        bratu2dt_model,

@@ -3,139 +3,126 @@
 # N=10000 variables (default), N/2-1=4999 equality constraints
 # All variables free; start: X(4k+1)=1, X(4k+2..4k+4)=2
 #
-# CUTEst variable ordering (due to sifdecoder reordering):
-#   j(m) = 10001-m  for m ≠ 5000, 5001  (reverse permutation)
-#   j(5000) = 5000  (identity)
-#   j(5001) = 5001  (identity)
+# CUTEst variable ordering: j(m) = N+1-m except j(N/2)=N/2, j(N/2+1)=N/2+1
+# j is self-inverse. Exception indices (where formula N+1-m is wrong):
+#   2I+2=half at I=qtr-1, 2I=half/2I+1=half+1 at I=qtr, 2I-1=half+1 at I=qtr+1
+#   I+2=half at I=half-2, I+1=half/I+2=half+1 at I=half-1
 #
-# Objective (groups A,B,C,D,F for I=1..N/2-1=4999, all L4 or AL6 or L8 or L2 types):
-#   A(I): L4, v = -X(2I) + exp(X(2I-1));  contrib = v^4
-#   B(I): AL6, v = X(2I) - X(2I+1);        contrib = 100*v^6
-#   C(I): L4, v = (X(2I+1)-X(2I+2)) + tan(X(2I+1)-X(2I+2))
-#              + 6*X(I+1) + 8*(X(I+1)^3 - X(I+1)*X(I)) - 4*X(I+2)^2 - 2
-#         contrib = v^4
-#   D(I): L8, v = X(2I-1);  contrib = v^8
-#   F(I): L2, v = X(2I+2) - 1;  contrib = v^2
-#
-# Note: C(I) group involves BOTH the "Wood function" pairs X(2I+1),X(2I+2) (from outer loop)
-# AND the "tridiagonal" triplet X(I),X(I+1),X(I+2) (from the K=I inner loop).
-#
-# Constraints C(K) for K=5000..9998 (ci = K-4999 = 1..4999):
-#   6*X(K+1) + 8*(X(K+1)^3 - X(K+1)*X(K)) - 4*X(K+2)^2 - 2 = 0
-#   using CUTEst positions: j(K), j(K+1), j(K+2)
+# Objective: A(I)=(-X(2I)+exp(X(2I-1)))^4, B(I)=100*(X(2I)-X(2I+1))^6,
+#   C(I)=(u+tan(u)+6X(I+1)+8(X(I+1)^3-X(I+1)X(I))-4X(I+2)^2-2)^4 with u=X(2I+1)-X(2I+2),
+#   D(I)=X(2I-1)^8, F(I)=(X(2I+2)-1)^2, using CUTEst positions j(.)
+# Constraints C(K), K=N/2..N-2 (ci=1..N/2-1):
+#   6X(K+1)+8(X(K+1)^3-X(K+1)X(K))-4X(K+2)^2-2 = 0, using CUTEst positions j(.)
 function lukvle4_model(N = 10000; T = Float64, backend = nothing, kwargs...)
-    @assert iseven(N) "N must be even"
-    @assert N >= 6 "N must be >= 6"
-    N2m1 = N ÷ 2 - 1  # = N/2 - 1
-
-    # CUTEst permutation: j(m) = N+1-m for m ≠ N/2, N/2+1; j(N/2) = N/2; j(N/2+1) = N/2+1
-    # For N=10000: j(m)=10001-m except j(5000)=5000, j(5001)=5001
+    @assert N % 4 == 0 "N must be divisible by 4"
+    @assert N >= 16 "N must be >= 16"
+    N2m1 = N ÷ 2 - 1
     half = N ÷ 2
-    function j(m)
-        if m == half; return half
-        elseif m == half + 1; return half + 1
-        else; return N + 1 - m
-        end
-    end
+    qtr  = N ÷ 4
 
-    # Start: in SIF order X(4k+1)=1, X(4k+2)=X(4k+3)=X(4k+4)=2
-    # CUTEst pos c = j(m) for SIF X(m): start[c] = sif_start[m]
-    perm = [j(m) for m in 1:N]
-    sif_start = T[((m-1) % 4 == 0) ? T(1) : T(2) for m in 1:N]
-    start = zeros(T, N)
-    for m in 1:N
-        start[perm[m]] = sif_start[m]
-    end
+    # start[c] = sif_start[j(c)]; j is self-inverse, so j(c)=c for c=half,half+1 else N+1-c
+    start = T[
+        let m = (c == half || c == half + 1) ? c : N + 1 - c
+            ((m - 1) % 4 == 0) ? T(1) : T(2)
+        end
+        for c in 1:N
+    ]
 
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = start)
 
-    # Objective: groups for I=1..N/2-1
-    # A(I): v = -X(2I) + exp(X(2I-1)) = -x[j(2I)] + exp(x[j(2I-1)])
-    # B(I): v = X(2I) - X(2I+1) = x[j(2I)] - x[j(2I+1)]
-    # C(I): v = (X(2I+1)-X(2I+2)) + tan(X(2I+1)-X(2I+2))
-    #          + 6*X(I+1) + 8*(X(I+1)^3 - X(I+1)*X(I)) - 4*X(I+2)^2 - 2
-    # D(I): v = X(2I-1) = x[j(2I-1)]
-    # F(I): v = X(2I+2) - 1 = x[j(2I+2)] - 1
+    # Exception boundary indices
+    Imex1 = qtr - 1   # 2I+2 = half  → F and C-tang wrong
+    Imex2 = qtr        # 2I = half, 2I+1 = half+1  → A, B, C-tang wrong
+    Imex3 = qtr + 1    # 2I-1 = half+1  → A, D wrong
+    Itri1 = half - 2   # I+2 = half  → C-tridiag wrong
+    Itri2 = half - 1   # I+1 = half, I+2 = half+1  → C-tridiag wrong (= N2m1)
 
-    # Precompute CUTEst positions for each group's SIF indices
-    # For I=1..N/2-1: indices 2I-1, 2I, 2I+1, 2I+2, I, I+1, I+2
-    # These all need to go through j(). Since j(m)=N+1-m is a formula, we can
-    # either precompute or use @add_par. We'll handle it explicitly.
+    # A(I): v = -x[j(2I)] + exp(x[j(2I-1)]), contrib = v^4
+    # clean: j(2I)=N+1-2i, j(2I-1)=N+2-2i
+    ExaModels.@add_obj(c, (-x[N+1-2i] + exp(x[N+2-2i]))^4 for i in 1:(Imex2-1))
+    ExaModels.@add_obj(c, (-x[half]   + exp(x[half+2]))^4)      # I=Imex2: j(half)=half,  j(half-1)=half+2
+    ExaModels.@add_obj(c, (-x[half-1] + exp(x[half+1]))^4)      # I=Imex3: j(half+2)=half-1, j(half+1)=half+1
+    ExaModels.@add_obj(c, (-x[N+1-2i] + exp(x[N+2-2i]))^4 for i in (Imex3+1):N2m1)
 
-    # All groups use j(m) = N+1-m in general. The only exceptions are j(N/2) and j(N/2+1).
-    # For I=1..N/2-1:
-    #   2I ranges 2..N-2, 2I-1 ranges 1..N-3, 2I+1 ranges 3..N-1, 2I+2 ranges 4..N
-    #   None of these equal N/2 or N/2+1 for most I.
-    #   Exception: when 2I-1=N/2 → I=(N/2+1)/2 (non-integer for even N/2) → no issue
-    #              2I=N/2 → I=N/4 → j(N/2)=N/2 (identity)
-    #              2I+1=N/2+1 → I=N/4 → j(N/2+1)=N/2+1 (identity)
-    #   So exceptions only affect groups where 2I=N/2 or 2I-1=N/2 or 2I+1=N/2 etc.
-    #   For I, I+1, I+2: when I=N/2 or I=N/2+1 (impossible since I<=N/2-1)
-    #   All relevant SIF indices i and i+k for the "tridiagonal" part (I, I+1, I+2):
-    #   max value = N/2+1 = 5001. j(5001)=5001 (identity). j(5000)=5000. Fine.
+    # B(I): v = x[j(2I)] - x[j(2I+1)], contrib = 100*v^6
+    # clean: j(2I)=N+1-2i, j(2I+1)=N-2i
+    ExaModels.@add_obj(c, T(100)*(x[N+1-2i] - x[N-2i])^6 for i in 1:(Imex2-1))
+    ExaModels.@add_obj(c, T(100)*(x[half] - x[half+1])^6)       # I=Imex2: j(half)=half, j(half+1)=half+1
+    ExaModels.@add_obj(c, T(100)*(x[N+1-2i] - x[N-2i])^6 for i in (Imex2+1):N2m1)
 
-    # Strategy: use @add_par with precomputed CUTEst positions
-    # Build arrays of positions for each term:
-    jA1 = T[T(j(2I-1)) for I in 1:N2m1]  # j(2I-1): for D and A
-    jA2 = T[T(j(2I))   for I in 1:N2m1]  # j(2I): for A, B
-    jA3 = T[T(j(2I+1)) for I in 1:N2m1]  # j(2I+1): for B, C tang
-    jA4 = T[T(j(2I+2)) for I in 1:N2m1]  # j(2I+2): for C tang, F
-    jI0 = T[T(j(I))    for I in 1:N2m1]  # j(I): for C cubic
-    jI1 = T[T(j(I+1))  for I in 1:N2m1]  # j(I+1): for C cubic
-    jI2 = T[T(j(I+2))  for I in 1:N2m1]  # j(I+2): for C cubic
-
-    ExaModels.@add_par(c, pA1, jA1)   # CUTEst pos of SIF X(2I-1)
-    ExaModels.@add_par(c, pA2, jA2)   # CUTEst pos of SIF X(2I)
-    ExaModels.@add_par(c, pA3, jA3)   # CUTEst pos of SIF X(2I+1)
-    ExaModels.@add_par(c, pA4, jA4)   # CUTEst pos of SIF X(2I+2)
-    ExaModels.@add_par(c, pI0, jI0)   # CUTEst pos of SIF X(I)
-    ExaModels.@add_par(c, pI1, jI1)   # CUTEst pos of SIF X(I+1)
-    ExaModels.@add_par(c, pI2, jI2)   # CUTEst pos of SIF X(I+2)
-
-    # A(I): contrib = v_A^4 where v_A = -x[j(2I)] + exp(x[j(2I-1)])
-    ExaModels.@add_obj(c, (-x[pA2[i]] + exp(x[pA1[i]]))^4 for i in 1:N2m1)
-
-    # B(I): contrib = 100 * v_B^6 where v_B = x[j(2I)] - x[j(2I+1)]
-    ExaModels.@add_obj(c, T(100) * (x[pA2[i]] - x[pA3[i]])^6 for i in 1:N2m1)
-
-    # C(I): contrib = v_C^4
+    # C(I): u=x[j(2I+1)]-x[j(2I+2)], v=u+tan(u)+tridiag, contrib=v^4
+    # clean: j(2I+1)=N-2i, j(2I+2)=N-1-2i, j(I)=N+1-i, j(I+1)=N-i, j(I+2)=N-1-i
     ExaModels.@add_obj(
         c,
-        let u = x[pA3[i]] - x[pA4[i]]
-            (u + tan(u) + T(6) * x[pI1[i]] + T(8) * (x[pI1[i]]^3 - x[pI1[i]] * x[pI0[i]]) -
-            T(4) * x[pI2[i]]^2 - T(2))^4
-        end for i in 1:N2m1
+        let u = x[N-2i] - x[N-1-2i]
+            (u + tan(u) + T(6)*x[N-i] + T(8)*(x[N-i]^3 - x[N-i]*x[N+1-i]) -
+             T(4)*x[N-1-i]^2 - T(2))^4
+        end for i in 1:(Imex1-1)
+    )
+    # I=Imex1: j(2I+1)=half+2, j(2I+2)=half, j(I)=half+qtr+2, j(I+1)=half+qtr+1, j(I+2)=half+qtr
+    ExaModels.@add_obj(c,
+        let u = x[half+2] - x[half]
+            (u + tan(u) + T(6)*x[half+qtr+1] + T(8)*(x[half+qtr+1]^3 - x[half+qtr+1]*x[half+qtr+2]) -
+             T(4)*x[half+qtr]^2 - T(2))^4
+        end
+    )
+    # I=Imex2: j(2I+1)=half+1, j(2I+2)=half-1, j(I)=half+qtr+1, j(I+1)=half+qtr, j(I+2)=half+qtr-1
+    ExaModels.@add_obj(c,
+        let u = x[half+1] - x[half-1]
+            (u + tan(u) + T(6)*x[half+qtr] + T(8)*(x[half+qtr]^3 - x[half+qtr]*x[half+qtr+1]) -
+             T(4)*x[half+qtr-1]^2 - T(2))^4
+        end
+    )
+    ExaModels.@add_obj(
+        c,
+        let u = x[N-2i] - x[N-1-2i]
+            (u + tan(u) + T(6)*x[N-i] + T(8)*(x[N-i]^3 - x[N-i]*x[N+1-i]) -
+             T(4)*x[N-1-i]^2 - T(2))^4
+        end for i in (Imex2+1):(Itri1-1)
+    )
+    # I=Itri1: j(2I+1)=4, j(2I+2)=3, j(I)=half+3, j(I+1)=half+2, j(I+2)=half (identity)
+    ExaModels.@add_obj(c,
+        let u = x[4] - x[3]
+            (u + tan(u) + T(6)*x[half+2] + T(8)*(x[half+2]^3 - x[half+2]*x[half+3]) -
+             T(4)*x[half]^2 - T(2))^4
+        end
+    )
+    # I=Itri2: j(2I+1)=2, j(2I+2)=1, j(I)=half+2, j(I+1)=half (identity), j(I+2)=half+1 (identity)
+    ExaModels.@add_obj(c,
+        let u = x[2] - x[1]
+            (u + tan(u) + T(6)*x[half] + T(8)*(x[half]^3 - x[half]*x[half+2]) -
+             T(4)*x[half+1]^2 - T(2))^4
+        end
     )
 
-    # D(I): contrib = v_D^8 where v_D = x[j(2I-1)]
-    ExaModels.@add_obj(c, x[pA1[i]]^8 for i in 1:N2m1)
+    # D(I): v = x[j(2I-1)], contrib = v^8
+    # clean: j(2I-1)=N+2-2i
+    ExaModels.@add_obj(c, x[N+2-2i]^8 for i in 1:(Imex3-1))
+    ExaModels.@add_obj(c, x[half+1]^8)                          # I=Imex3: j(half+1)=half+1
+    ExaModels.@add_obj(c, x[N+2-2i]^8 for i in (Imex3+1):N2m1)
 
-    # F(I): contrib = v_F^2 where v_F = x[j(2I+2)] - 1
-    ExaModels.@add_obj(c, (x[pA4[i]] - T(1))^2 for i in 1:N2m1)
+    # F(I): v = x[j(2I+2)] - 1, contrib = v^2
+    # clean: j(2I+2)=N-1-2i
+    ExaModels.@add_obj(c, (x[N-1-2i] - T(1))^2 for i in 1:(Imex1-1))
+    ExaModels.@add_obj(c, (x[half] - T(1))^2)                   # I=Imex1: j(half)=half
+    ExaModels.@add_obj(c, (x[N-1-2i] - T(1))^2 for i in (Imex1+1):N2m1)
 
-    # Constraints C(K=5000..N-2) = ci=1..N/2-1:
-    # K = ci + N/2 - 1 = ci + 4999
-    # CUTEst pos: j(K), j(K+1), j(K+2) = j(ci+4999), j(ci+5000), j(ci+5001)
-    # j(ci+4999) = N+1-(ci+4999) = 5001-ci (for ci>=1, 5001-ci <= 5000, none is 5000 or 5001 for ci>=1)
-    # j(ci+5000) = N+1-(ci+5000) = 5000-ci (for ci>=1... but j(5000)=5000, and ci+5000=5000 when ci=0)
-    # For ci=1: j(5000)=5000, j(5001)=5001, j(5002)=4999
-    # For ci=2..N/2-1: j(ci+4999)=5001-ci, j(ci+5000)=5000-ci, j(ci+5001)=4999-ci
-    # All these are >= 1 for ci <= 4999 and != 5000 or 5001 for ci >= 2.
-
-    # Build constraint position arrays
-    jC0 = T[T(j(i + half - 1))    for i in 1:N2m1]
-    jC1 = T[T(j(i + half))        for i in 1:N2m1]
-    jC2 = T[T(j(i + half + 1))    for i in 1:N2m1]
-    ExaModels.@add_par(c, pC0, jC0)
-    ExaModels.@add_par(c, pC1, jC1)
-    ExaModels.@add_par(c, pC2, jC2)
-
-    ExaModels.@add_con(
-        c,
-        T(6) * x[pC1[k]] + T(8) * (x[pC1[k]]^3 - x[pC1[k]] * x[pC0[k]]) -
-        T(4) * x[pC2[k]]^2 - T(2)
-        for k in 1:N2m1
+    # Constraints: C(K=half+ci-1) for ci=1..N2m1
+    # value = 6*x[j(K+1)] + 8*(x[j(K+1)]^3 - x[j(K+1)]*x[j(K)]) - 4*x[j(K+2)]^2 - 2
+    # ci=1: j(K)=half, j(K+1)=half+1, j(K+2)=half-1
+    ExaModels.@add_con(c,
+        T(6)*x[half+1] + T(8)*(x[half+1]^3 - x[half+1]*x[half]) - T(4)*x[half-1]^2 - T(2)
+    )
+    # ci=2: j(K)=half+1, j(K+1)=half-1, j(K+2)=half-2
+    ExaModels.@add_con(c,
+        T(6)*x[half-1] + T(8)*(x[half-1]^3 - x[half-1]*x[half+1]) - T(4)*x[half-2]^2 - T(2)
+    )
+    # ci=3..N2m1: j(K)=half+2-ci, j(K+1)=half+1-ci, j(K+2)=half-ci
+    ExaModels.@add_con(c,
+        T(6)*x[half+1-ci] + T(8)*(x[half+1-ci]^3 - x[half+1-ci]*x[half+2-ci]) -
+        T(4)*x[half-ci]^2 - T(2)
+        for ci in 3:N2m1
     )
 
     return ExaModels.ExaModel(c; kwargs...)

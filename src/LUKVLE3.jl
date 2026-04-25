@@ -52,20 +52,32 @@ function lukvle3_model(N = 10000; T = Float64, backend = nothing, kwargs...)
         ExaModels.@add_obj(c, T(10) * (x[pa] - x[pd])^4)
     end
 
-    # Interior groups I=2..N/2-2: all natural positions
-    if N2m1 >= 3
-        ExaModels.@add_obj(c, (x[2i-1] + T(10) * x[2i])^2 for i in 2:(N2m1-1))
-        ExaModels.@add_obj(c, T(5) * (x[2i+1] - x[2i+2])^2 for i in 2:(N2m1-1))
-        ExaModels.@add_obj(c, (x[2i] - T(2) * x[2i+1])^4 for i in 2:(N2m1-1))
-        ExaModels.@add_obj(c, T(10) * (x[2i-1] - x[2i+2])^4 for i in 2:(N2m1-1))
-    end
-
-    # Group I=N/2-1: SIF pos (N-3,N-2,N-1,N) → CUTEst (N-3, N-2, perm[N-1]=4, perm[N]=3)
-    let pa = perm[N-3], pb = perm[N-2], pc = perm[N-1], pd = perm[N]
+    # Group I=2: SIF pos (3,4,5,6) → CUTEst (perm[3]=N, perm[4]=N-1, perm[5], perm[6])
+    # This group must be special because SIF X(3)→CUTEst N and SIF X(4)→CUTEst N-1
+    let pa = perm[3], pb = perm[4], pc = perm[5], pd = perm[6]
         ExaModels.@add_obj(c, (x[pa] + T(10) * x[pb])^2)
         ExaModels.@add_obj(c, T(5) * (x[pc] - x[pd])^2)
         ExaModels.@add_obj(c, (x[pb] - T(2) * x[pc])^4)
         ExaModels.@add_obj(c, T(10) * (x[pa] - x[pd])^4)
+    end
+
+    # Interior groups I=3..N/2-2: all natural positions (identity permutation)
+    if N2m1 >= 4
+        ExaModels.@add_obj(c, (x[2i-1] + T(10) * x[2i])^2 for i in 3:(N2m1-1))
+        ExaModels.@add_obj(c, T(5) * (x[2i+1] - x[2i+2])^2 for i in 3:(N2m1-1))
+        ExaModels.@add_obj(c, (x[2i] - T(2) * x[2i+1])^4 for i in 3:(N2m1-1))
+        ExaModels.@add_obj(c, T(10) * (x[2i-1] - x[2i+2])^4 for i in 3:(N2m1-1))
+    end
+
+    # Group I=N/2-1: SIF pos (N-3,N-2,N-1,N) → CUTEst (N-3, N-2, perm[N-1]=4, perm[N]=3)
+    # Only needed when N2m1 > 2 (i.e., N > 6); for N=6 group I=2 = I=N/2-1 already covered above
+    if N2m1 > 2
+        let pa = perm[N-3], pb = perm[N-2], pc = perm[N-1], pd = perm[N]
+            ExaModels.@add_obj(c, (x[pa] + T(10) * x[pb])^2)
+            ExaModels.@add_obj(c, T(5) * (x[pc] - x[pd])^2)
+            ExaModels.@add_obj(c, (x[pb] - T(2) * x[pc])^4)
+            ExaModels.@add_obj(c, T(10) * (x[pa] - x[pd])^4)
+        end
     end
 
     # C1: 3*X(1)^3 + sin(X(1)-X(2))*sin(X(1)+X(2)) + 2*X(2) - 5
