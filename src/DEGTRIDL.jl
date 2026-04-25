@@ -4,9 +4,13 @@
 #
 # Objective (same QUADRATIC structure as DEGTRID, but different linear terms from GROUPS):
 #   linear: +0.5*X(0) - 0.5*X(1) - X(I) for I=2..N-1 - 0.5*X(N)
-#   quad:   0.5*X(I)^2 for I=0..N  +  0.25*X(I)*X(I-1) for I=1..N
+#   quad:   0.5*X(I)^2 for I=0..N  +  0.5*X(I)*X(I-1) for I=1..N
+#           (off-diagonal QUADRATIC coefficient 0.5 → full term 0.5*X(I)*X(I-1))
 #
 # SIF: BOUNDS section has only commented-out entries → SIF default (x >= 0)
+#
+# Note: the constraint uses @add_con! to accumulate N+1 terms one-at-a-time to avoid
+# the deep-type-chain issue of sum(x[i] for i in 1:N+1) for large N.
 function degtridl_model(N = 100000; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N + 1; lvar = T(0), uvar = T(Inf), start = T(2))
@@ -19,7 +23,10 @@ function degtridl_model(N = 100000; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_obj(c, T(0.5) * x[i]^2 for i in 1:N+1)
     # Quadratic off-diagonal: coefficient 0.5 → 0.5*X(I)*X(I-1) (off-diag SIF QUADRATIC convention)
     ExaModels.@add_obj(c, T(0.5) * x[i+1] * x[i] for i in 1:N)
-    # Equality constraint: sum_{I=0}^N X(I) - N = 0 (residual form for CUTEst convention)
-    ExaModels.@add_con(c, sum(x[i] for i in 1:N+1) - T(N))
+    # Equality constraint: sum_{I=0}^N X(I) - N = 0 (residual form: expr = sum(x) - N, lcon=ucon=0)
+    # Use @add_con! to accumulate x[i] terms one-by-one (avoids deep type chain for large N)
+    ExaModels.@add_con(c, con, 1; lcon = T(0), ucon = T(0))
+    ExaModels.@add_con!(c, con[1] += x[i] for i in 1:N+1)
+    ExaModels.@add_con!(c, con[1] += -T(N) for _ in 1:1)
     return ExaModels.ExaModel(c; kwargs...)
 end
