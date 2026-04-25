@@ -389,6 +389,17 @@ include("LISWET12.jl")
 include("GROWTHLS.jl")
 include("NCVXQP.jl")
 include("BOX.jl")
+include("CHACONN1.jl")
+include("CHACONN2.jl")
+include("AIRCRFTA.jl")
+include("AIRCRFTB.jl")
+include("BDVALUE.jl")
+include("BDVALUES.jl")
+include("CHANDHEQ.jl")
+include("CHANDHEU.jl")
+include("DIXCHLNG.jl")
+include("DIXCHLNV.jl")
+include("DEMYMALO.jl")
 
 export rosenbr_model,
        hs1_model, hs2_model, hs3_model, hs4_model, hs5_model,
@@ -626,6 +637,12 @@ export rosenbr_model,
        ncvxqp1_model, ncvxqp2_model, ncvxqp3_model,
        ncvxqp4_model, ncvxqp5_model, ncvxqp6_model,
        ncvxqp7_model, ncvxqp8_model, ncvxqp9_model,
-       box_model
+       box_model,
+       chaconn1_model, chaconn2_model,
+       aircrfta_model, aircrftb_model,
+       bdvalue_model, bdvalues_model,
+       chandheq_model, chandheu_model,
+       dixchlng_model, dixchlnv_model,
+       demymalo_model
 
 end # module ExaCUTEst
