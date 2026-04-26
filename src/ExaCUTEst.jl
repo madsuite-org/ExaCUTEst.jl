@@ -122,6 +122,12 @@ include("HIMMELBD.jl")
 include("HIMMELBE.jl")
 include("HIMMELBG.jl")
 include("HIMMELBH.jl")
+include("HIMMELP1.jl")
+include("HIMMELP2.jl")
+include("HIMMELP3.jl")
+include("HIMMELP4.jl")
+include("HIMMELP5.jl")
+include("HIMMELP6.jl")
 include("RSNBRNE.jl")
 include("BT1.jl")
 include("BT10.jl")
@@ -258,6 +264,8 @@ include("HATFLDA.jl")
 include("HATFLDC.jl")
 include("HATFLDD.jl")
 include("HATFLDE.jl")
+include("HEART6LS.jl")
+include("HEART8LS.jl")
 include("HATFLDF.jl")
 include("HATFLDFL.jl")
 include("HATFLDH.jl")
@@ -522,6 +530,8 @@ export rosenbr_model,
        tame_model, alsotame_model, degdiag_model,
        zangwil3_model, booth_model, himmelbc_model, himmelbd_model, himmelbe_model,
        himmelbg_model, himmelbh_model,
+       himmelp1_model, himmelp2_model, himmelp3_model,
+       himmelp4_model, himmelp5_model, himmelp6_model,
        rsnbrne_model, bt1_model, bt2_model, bt3_model, bt4_model, bt5_model,
        bt6_model, bt7_model, bt8_model, bt9_model,
        bt10_model, bt11_model, bt12_model, bt13_model,
@@ -612,6 +622,7 @@ export rosenbr_model,
        penalty1_model, penalty2_model,
        fletchbv_model, quartc_model, explin_model, explin2_model, genrose_model,
        argauss_model, arglina_model, hatflda_model, hatfldc_model, hatfldd_model, hatflde_model, hatfldf_model, hatfldfl_model, hatfldh_model, scurly10_model,
+       heart6ls_model, heart8ls_model,
        bdry2_model, hilberta_model,
        brownale_model,
        clplatea_model,

@@ -5,7 +5,7 @@ function allinitc_model(; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_var(c, x, 4;
         lvar = T[T(-Inf), T(1), T(-1e10), T(2)],
         uvar = T[T(Inf), T(Inf), T(1), T(2)],
-        start = T[T(0), T(0), T(0), T(2)])
+        start = T[T(0), T(0), T(0), T(0)])
     # Objective (same as ALLINIT)
     ExaModels.@add_obj(c, x[3] - T(1))
     ExaModels.@add_obj(c, x[1]^2)

@@ -2,11 +2,11 @@
 # N=5000, KAPPA1=2, KAPPA2=5, KAPPA3=1, LB=5, UB=1
 # All FREE, start=1.0; N equality constraints (NOR classification)
 #
-# G(I) = KAPPA1*x[I] + KAPPA2*x[I]^3
-#        - KAPPA3 * sum_{j in nbrs(I)} (x[j] + x[j]^2)
-# where nbrs(I) = {max(1,I-LB)..I-1} ∪ {I+1..min(N,I+UB)}
-#
-# Use data array with precomputed (i, lower, upper) bounds for neighbor sums.
+# Three regions with DIFFERENT element types (from GROUP USES section):
+#   Upper left  (I=1..LB):        self=X(I)^3*KAPPA2,  nbrs=X(J)^2*(-KAPPA3) (all)
+#   Main        (I=LB+1..N-UB-1): self=X(I)^2*KAPPA2,  LEFT=X(J)^3*(-KAPPA3), RIGHT=X(J)^2*(-KAPPA3)
+#   Lower right (I=N-UB..N):      self=X(I)^3*KAPPA2,  nbrs=X(J)^2*(-KAPPA3) (all)
+# Linear part (same for all): KAPPA1*X(I) - KAPPA3*sum(X(j) for j in nbrs)
 function broydnbd_model(N = 5000; T = Float64, backend = nothing, kwargs...)
     KAPPA1 = T(2)
     KAPPA2 = T(5)
@@ -17,20 +17,9 @@ function broydnbd_model(N = 5000; T = Float64, backend = nothing, kwargs...)
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = T(1))
 
-    # Main bulk: I=LB+1..N-UB-1 (1-based: i=LB+1..N-UB, same range)
-    # For these, lower neighbor range is i-LB..i-1 (LB=5 terms), upper is i+1..i+UB (UB=1 term)
-    # Unroll the fixed-bandwidth sum: 5 left + 1 right = 6 neighbors
-    ExaModels.@add_con(
-        c,
-        KAPPA1 * x[i] + KAPPA2 * x[i]^3
-        - KAPPA3 * (x[i-5] + x[i-4] + x[i-3] + x[i-2] + x[i-1] + x[i+1])
-        - KAPPA3 * (x[i-5]^2 + x[i-4]^2 + x[i-3]^2 + x[i-2]^2 + x[i-1]^2 + x[i+1]^2)
-        for i in (LB+1):(N-UB)
-    )
-
-    # Boundary constraints: I=1..LB (fewer left neighbors)
+    # Upper left (I=1..LB): self=x[i]^3, all nbrs=x[j]^2
     for i in 1:LB
-        lo = 1          # no left neighbors below 1
+        lo = 1
         hi = min(N, i + UB)
         nbrs = [j for j in lo:hi if j != i]
         nbrs_data = [(j = j,) for j in nbrs]
@@ -41,10 +30,23 @@ function broydnbd_model(N = 5000; T = Float64, backend = nothing, kwargs...)
         )
     end
 
-    # Boundary constraints: I=N-UB+1..N (fewer right neighbors), when UB>0
-    for i in (N-UB+1):N
+    # Main (I=LB+1..N-UB-1): self=x[i]^2, LEFT nbrs=x[j]^3, RIGHT nbr=x[j]^2
+    ExaModels.@add_con(
+        c,
+        KAPPA1 * x[i] + KAPPA2 * x[i]^2
+        - KAPPA3 * (x[i-5] + x[i-5]^3)
+        - KAPPA3 * (x[i-4] + x[i-4]^3)
+        - KAPPA3 * (x[i-3] + x[i-3]^3)
+        - KAPPA3 * (x[i-2] + x[i-2]^3)
+        - KAPPA3 * (x[i-1] + x[i-1]^3)
+        - KAPPA3 * (x[i+1] + x[i+1]^2)
+        for i in (LB+1):(N-UB-1)
+    )
+
+    # Lower right (I=N-UB..N): self=x[i]^3, all nbrs=x[j]^2 (same structure as upper left)
+    for i in (N-UB):N
         lo = max(1, i - LB)
-        hi = N           # no right neighbors beyond N
+        hi = N
         nbrs = [j for j in lo:hi if j != i]
         nbrs_data = [(j = j,) for j in nbrs]
         ExaModels.@add_con(

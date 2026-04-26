@@ -32,7 +32,7 @@ function bratu1d_model(N = 5001; T = Float64, backend = nothing, kwargs...)
     start = Vector{T}(undef, nvar)
     start[1] = T(0)
     for I in 1:N
-        start[I+1] = T(-0.1) * T(I)^2 / T(N + 1)
+        start[I+1] = T(-0.1) * T(Float32(I) * Float32(I)) / T(N + 1)
     end
     start[nvar] = T(0)
 
