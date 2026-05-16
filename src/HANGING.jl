@@ -57,7 +57,7 @@ function hanging_model(NX = 40, NY = 30; T = Float64, backend = nothing, kwargs.
     ExaModels.@add_var(c, x, nvar; lvar = lvar, uvar = uvar, start = start)
 
     # Objective: sum Z(I,J) = sum x[vidx(i,j,3)]
-    ExaModels.@add_obj(c, x[3 * ((i - 1) * NY + (j - 1)) + 3] for i in 1:NX for j in 1:NY)
+    ExaModels.@add_obj(c, x[d.idx] for d in [(idx = 3 * ((i - 1) * NY + (j - 1)) + 3,) for i in 1:NX for j in 1:NY])
 
     # RC(I,J) constraints: sum of squared diffs in x,y,z direction between (I,J) and (I,J+1)
     # (X(I,J+1)-X(I,J))^2 + (Y(I,J+1)-Y(I,J))^2 + (Z(I,J+1)-Z(I,J))^2 - LX^2 <= 0

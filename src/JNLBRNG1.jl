@@ -122,9 +122,8 @@ function jnlbrng1_model(PT = 100, PY = 100; T = Float64, backend = nothing, kwar
     # Interior nodes: i=2..PT-1 (ri=1..PT-2), j=2..PY-1
 
     # Linear terms for interior nodes
-    ExaModels.@add_obj(c,
-        COEFF_R[ri] * x[(ri + 1 - 1) * PY + j]
-        for ri in 1:(PT-2) for j in 2:(PY-1))
+    data_lin = [(ri = ri, idx = ri * PY + j) for ri in 1:(PT-2) for j in 2:(PY-1)]
+    ExaModels.@add_obj(c, COEFF_R[d.ri] * x[d.idx] for d in data_lin)
 
     # Quadratic terms from right triangles GR(I,J) for I=1..PT-1, J=1..PY-1
     # GR(I,J) contributes LA_I * HY/HT * (X(I+1,J)-X(I,J))^2 + LA_I * HT/HY * (X(I,J+1)-X(I,J))^2
@@ -155,16 +154,18 @@ function jnlbrng1_model(PT = 100, PY = 100; T = Float64, backend = nothing, kwar
     ExaModels.@add_par(c, ALL_MU_Y2, all_mu_hy2)
 
     # Right triangle GR(I,J): I=1..PT-1, J=1..PY-1
+    data_right = [(ri = ri, idx_ip = ri * PY + j, idx_ij = (ri - 1) * PY + j, idx_jp = (ri - 1) * PY + j + 1) for ri in 1:(PT-1) for j in 1:(PY-1)]
     ExaModels.@add_obj(c,
-        ALL_LA_T2[ri] * (x[ri * PY + j] - x[(ri - 1) * PY + j])^2 +
-        ALL_LA_Y2[ri] * (x[(ri - 1) * PY + j + 1] - x[(ri - 1) * PY + j])^2
-        for ri in 1:(PT-1) for j in 1:(PY-1))
+        ALL_LA_T2[d.ri] * (x[d.idx_ip] - x[d.idx_ij])^2 +
+        ALL_LA_Y2[d.ri] * (x[d.idx_jp] - x[d.idx_ij])^2
+        for d in data_right)
 
     # Left triangle GL(I,J): I=2..PT, J=2..PY
+    data_left = [(mu_ri = ri - 1, idx_im = (ri - 2) * PY + j, idx_ij = (ri - 1) * PY + j, idx_jm = (ri - 1) * PY + j - 1) for ri in 2:PT for j in 2:PY]
     ExaModels.@add_obj(c,
-        ALL_MU_T2[ri] * (x[(ri - 2) * PY + j] - x[(ri - 1) * PY + j])^2 +
-        ALL_MU_Y2[ri] * (x[(ri - 1) * PY + j - 1] - x[(ri - 1) * PY + j])^2
-        for ri in 2:PT for j in 2:PY)
+        ALL_MU_T2[d.mu_ri] * (x[d.idx_im] - x[d.idx_ij])^2 +
+        ALL_MU_Y2[d.mu_ri] * (x[d.idx_jm] - x[d.idx_ij])^2
+        for d in data_left)
 
     return ExaModels.ExaModel(c; kwargs...)
 end

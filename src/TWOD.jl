@@ -124,7 +124,7 @@ function twod_model(N = 40; T = Float64, backend = nothing, kwargs...)
 
     # SQ control terms: K=1..M-1
     let ADTDXh = T(0.5 * ADTDX)
-        ExaModels.@add_obj(c, ADTDXh * x[u_idx(K, I)]^2 for K in 1:M1 for I in 1:N1)
+        ExaModels.@add_obj(c, ADTDXh * x[d.idx]^2 for d in [(idx = u_idx(K, I),) for K in 1:M1 for I in 1:N1])
     end
     # Last time step K=M
     let ADTDXq = T(0.25 * ADTDX)

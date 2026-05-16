@@ -60,7 +60,7 @@ function kissing2_model(m = 25, n = 4; T = Float64, backend = nothing, kwargs...
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, nvar; lvar = lvar, uvar = uvar, start = start)
 
-    ExaModels.@add_obj(c, x[(i-1)*n + k]^2 for i in 1:m for k in 1:n)
+    ExaModels.@add_obj(c, x[d.idx]^2 for d in [(idx = (i-1)*n + k,) for i in 1:m for k in 1:n])
     # Constant -mn: ExaModels doesn't support constant objective terms directly,
     # but we can add it as a parameter (or omit - CUTEst would match).
     # Actually CUTEst includes the constant in the objective. We need to subtract mn.
