@@ -39,15 +39,16 @@ function hadamard_model(N = 20; T = Float64, backend = nothing, kwargs...)
     end
 
     # L(I,J) constraints (G type: >= 0): MAXABSQ + Q(I,J) >= 0
+    data_ij = [(idx = 1 + (i - 1) * N + j,) for i in 1:N for j in 1:N]
     ExaModels.@add_con(c,
-        x[1] + x[1 + (i - 1) * N + j]
-        for i in 1:N for j in 1:N;
+        x[1] + x[d.idx]
+        for d in data_ij;
         lcon = T(0), ucon = T(Inf))
 
     # U(I,J) constraints (G type: >= 0): MAXABSQ - Q(I,J) >= 0
     ExaModels.@add_con(c,
-        x[1] - x[1 + (i - 1) * N + j]
-        for i in 1:N for j in 1:N;
+        x[1] - x[d.idx]
+        for d in data_ij;
         lcon = T(0), ucon = T(Inf))
 
     return ExaModels.ExaModel(c; kwargs...)
