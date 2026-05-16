@@ -10,12 +10,13 @@ function sparsine_model(N = 5000; T = Float64, backend = nothing, kwargs...)
              j3  = mod(3*i  - 1, N) + 1,
              j5  = mod(5*i  - 1, N) + 1,
              j7  = mod(7*i  - 1, N) + 1,
-             j11 = mod(11*i - 1, N) + 1) for i in 1:N]
+             j11 = mod(11*i - 1, N) + 1,
+             p   = T(0.5) * T(i)) for i in 1:N]
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(-Inf), uvar = T(Inf), start = T(0.5))
     ExaModels.@add_obj(c,
         let v = sin(x[d.i]) + sin(x[d.j2]) + sin(x[d.j3]) + sin(x[d.j5]) + sin(x[d.j7]) + sin(x[d.j11])
-            T(0.5) * T(d.i) * v^2
+            d.p * v^2
         end
         for d in data)
     return ExaModels.ExaModel(c; kwargs...)

@@ -5,15 +5,15 @@
 # Variants differ in NPLUS (fraction of positive terms) and M (number of constraints)
 
 function _ncvxqp_model(N, NPLUS, M; T = Float64, backend = nothing, kwargs...)
-    data_pos = [(i = i, j2 = mod(2*i-1, N)+1, j3 = mod(3*i-1, N)+1) for i in 1:NPLUS]
-    data_neg = [(i = i, j2 = mod(2*i-1, N)+1, j3 = mod(3*i-1, N)+1) for i in NPLUS+1:N]
+    data_pos = [(i = i, j2 = mod(2*i-1, N)+1, j3 = mod(3*i-1, N)+1, p = T(0.5*i)) for i in 1:NPLUS]
+    data_neg = [(i = i, j2 = mod(2*i-1, N)+1, j3 = mod(3*i-1, N)+1, p = T(-0.5*i)) for i in NPLUS+1:N]
     data_con = [(i = i, j4 = mod(4*i-1, N)+1, j5 = mod(5*i-1, N)+1) for i in 1:M]
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
     ExaModels.@add_var(c, x, N; lvar = T(0.1), uvar = T(10.0), start = T(0.5))
     ExaModels.@add_obj(c,
-        T(0.5) * T(d.i) * (x[d.i] + x[d.j2] + x[d.j3])^2 for d in data_pos)
+        d.p * (x[d.i] + x[d.j2] + x[d.j3])^2 for d in data_pos)
     ExaModels.@add_obj(c,
-        -T(0.5) * T(d.i) * (x[d.i] + x[d.j2] + x[d.j3])^2 for d in data_neg)
+        d.p * (x[d.i] + x[d.j2] + x[d.j3])^2 for d in data_neg)
     ExaModels.@add_con(c,
         x[d.i] + T(2)*x[d.j4] + T(3)*x[d.j5] - T(6) for d in data_con)
     return ExaModels.ExaModel(c; kwargs...)

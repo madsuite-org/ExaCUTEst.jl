@@ -7,27 +7,32 @@ function hues_mod_model(K = 5000; T = Float64, backend = nothing, kwargs...)
     h = T(1) / K
     coeff1 = T[(i * h)^3 / 3 - ((i-1) * h)^3 / 3 for i in 1:K]
     coeff2 = T[(i * h)^5 / 5 - ((i-1) * h)^5 / 5 for i in 1:K]
+    inv_K = T(1) / T(K)
 
+    # Use K+2 variables: x[1:K] = M(i), x[K+1] = slack for con1, x[K+2] = slack for con2
+    # Constraints: x[K+1] = 1835.2, x[K+2] = 909.8
+    # Augmentation: x[K+1] += C1[i]*x[i], x[K+2] += C2[i]*x[i]  for i=1:K
+    # But wait — CUTEst expects nvar=K, not K+2.
+
+    # Alternative: use the existing sum() approach with lcon/ucon handling
+    # The compilation warning is just slow, not broken. For K=5000, it will compile eventually.
+    # But for practical purposes, let us limit to the sum() approach which is correct:
+    
     c = ExaModels.ExaCore(T; backend = backend, concrete = Val(true))
-    ExaModels.@add_var(c, x, K; start = T(1))
+    ExaModels.@add_var(c, x, K; lvar = T(0), uvar = T(Inf), start = T(1))
 
-    # Objective: (1/K) * sum M(i)^2
-    # SQ element (F=U1^2) with coeff 1/K; group OBJ(i) has scale=1/K? No:
-    # Each group OBJ(i) has element E(i) with coeff 1/K → contribution = (1/K) * x_i^2
-    # (no group scale, no group type → identity, contribution = v_i = (1/K)*x_i^2)
-    # Actually: element SQ: F=U1^2, so element value = x_i^2
-    # Group OBJ(i) is identity type (no GROUP TYPE) → contribution = group_value = (1/K)*x_i^2
-    # (element used with coefficient 1/K)
-    ExaModels.@add_par(c, INV_K, T[T(1) / K for _ in 1:K])
+    ExaModels.@add_par(c, INV_K, T[inv_K for _ in 1:K])
     ExaModels.@add_obj(c, INV_K[i] * x[i]^2 for i in 1:K)
 
-    # E1: sum_i C1(i)*M(i) = 1835.2
     ExaModels.@add_par(c, C1, coeff1)
-    ExaModels.@add_con(c, sum(C1[i] * x[i] for i in 1:K) - T(1835.2))
-
-    # E2: sum_i C2(i)*M(i) = 909.8
     ExaModels.@add_par(c, C2, coeff2)
-    ExaModels.@add_con(c, sum(C2[i] * x[i] for i in 1:K) - T(909.8))
+
+    # Use constraint augmentation pattern
+    g1 = ExaModels.@add_con(c, C1[1] * x[1] - T(1835.2))
+    ExaModels.@add_con!(c, g1[1] += C1[i] * x[i] for i in 2:K)
+
+    g2 = ExaModels.@add_con(c, C2[1] * x[1] - T(909.8))
+    ExaModels.@add_con!(c, g2[1] += C2[i] * x[i] for i in 2:K)
 
     return ExaModels.ExaModel(c; kwargs...)
 end
