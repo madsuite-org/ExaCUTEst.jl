@@ -49,13 +49,14 @@ function jnlbrngb_model(PT = 100, PY = 100; T = Float64, backend = nothing, kwar
     ExaModels.@add_par(c, LA_T2, LA_HT2)
     ExaModels.@add_par(c, LA_Y2, LA_HY2)
 
+    data_interior = [(ri = ri, idx = ri * PY + j, idx_ip = (ri + 1) * PY + j, idx_jp = ri * PY + j + 1, idx_im = (ri - 1) * PY + j, idx_jm = ri * PY + j - 1) for ri in 1:(PT-2) for j in 2:(PY-1)]
     ExaModels.@add_obj(c,
-        COEFF_R[ri] * x[ri * PY + j] +
-        MU_T2[ri] * (x[(ri + 1) * PY + j] - x[ri * PY + j])^2 +
-        MU_Y2[ri] * (x[ri * PY + j + 1] - x[ri * PY + j])^2 +
-        LA_T2[ri] * (x[(ri - 1) * PY + j] - x[ri * PY + j])^2 +
-        LA_Y2[ri] * (x[ri * PY + j - 1] - x[ri * PY + j])^2
-        for ri in 1:(PT-2) for j in 2:(PY-1))
+        COEFF_R[d.ri] * x[d.idx] +
+        MU_T2[d.ri] * (x[d.idx_ip] - x[d.idx])^2 +
+        MU_Y2[d.ri] * (x[d.idx_jp] - x[d.idx])^2 +
+        LA_T2[d.ri] * (x[d.idx_im] - x[d.idx])^2 +
+        LA_Y2[d.ri] * (x[d.idx_jm] - x[d.idx])^2
+        for d in data_interior)
 
     return ExaModels.ExaModel(c; kwargs...)
 end

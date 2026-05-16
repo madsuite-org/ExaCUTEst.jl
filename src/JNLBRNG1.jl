@@ -143,10 +143,10 @@ function jnlbrng1_model(PT = 100, PY = 100; T = Float64, backend = nothing, kwar
     # Lambda_I = (2*W[I] + W[I+1]) / 6
     # LA/HT2[I] = Lambda_I * HY/HT, LA/HY2[I] = Lambda_I * HT/HY
 
-    all_la_ht2 = T[(T(2) * W[i] + W[i+1]) / T(6) * HY_HT for i in 1:(PT-1)]
-    all_la_hy2 = T[(T(2) * W[i] + W[i+1]) / T(6) * HT_HY for i in 1:(PT-1)]
-    all_mu_ht2 = T[(T(2) * W[i] + W[i-1]) / T(6) * HY_HT for i in 2:PT]
-    all_mu_hy2 = T[(T(2) * W[i] + W[i-1]) / T(6) * HT_HY for i in 2:PT]
+    all_la_ht2 = T[(T(2) * W[i] + W[i+1]) / T(12) * HY_HT for i in 1:(PT-1)]
+    all_la_hy2 = T[(T(2) * W[i] + W[i+1]) / T(12) * HT_HY for i in 1:(PT-1)]
+    all_mu_ht2 = T[(T(2) * W[i] + W[i-1]) / T(12) * HY_HT for i in 2:PT]
+    all_mu_hy2 = T[(T(2) * W[i] + W[i-1]) / T(12) * HT_HY for i in 2:PT]
 
     ExaModels.@add_par(c, ALL_LA_T2, all_la_ht2)
     ExaModels.@add_par(c, ALL_LA_Y2, all_la_hy2)
