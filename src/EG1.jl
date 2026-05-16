@@ -10,7 +10,7 @@ function eg1_model(; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_var(c, x, 3;
         lvar = T[T(-Inf), T(-1), T(1)],
         uvar = T[T(Inf), T(1), T(2)],
-        start = T[T(0), T(0), T(1)])
+        start = T[T(0), T(0), T(0)])
     ExaModels.@add_obj(c, x[1]^2)
     ExaModels.@add_obj(c, (x[2] * x[3])^4)
     ExaModels.@add_obj(c, x[2] + x[2] * sin(x[1] + x[3]) + x[1] * x[3])

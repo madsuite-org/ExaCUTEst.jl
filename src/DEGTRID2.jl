@@ -10,6 +10,6 @@ function degtrid2_model(N = 100000; T = Float64, backend = nothing, kwargs...)
     ExaModels.@add_obj(c, -T(2) * x[i] for i in 3:N)
     ExaModels.@add_obj(c, -T(1.5) * x[N+1])
     ExaModels.@add_obj(c, T(0.5) * x[i]^2 for i in 1:N+1)
-    ExaModels.@add_obj(c, T(0.25) * x[i+1] * x[i] for i in 1:N)
+    ExaModels.@add_obj(c, T(0.5) * x[i+1] * x[i] for i in 1:N)
     return ExaModels.ExaModel(c; kwargs...)
 end

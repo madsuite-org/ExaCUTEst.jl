@@ -15,7 +15,7 @@ function dixchlng_model(; T = Float64, backend = nothing, kwargs...)
         T(100) * (x[d.ip1] - x[d.i]^2)^2 + (x[d.i] - T(1))^2 +
         T(90) * (x[d.ip3] - x[d.ip2]^2)^2 + (x[d.ip2] - T(1))^2 +
         T(10.1) * (x[d.ip1] - T(1))^2 + T(10.1) * (x[d.ip3] - T(1))^2 +
-        T(19.8) * ((x[d.ip1] - T(1)) * (x[d.ip3] - T(1)))^2
+        T(19.8) * (x[d.ip1] - T(1)) * (x[d.ip3] - T(1))
         for d in data_I)
     ExaModels.@add_con(c, x[1]*x[2] - T(1))
     ExaModels.@add_con(c, x[1]*x[2]*x[3]*x[4] - T(1))

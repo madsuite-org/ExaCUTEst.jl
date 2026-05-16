@@ -21,7 +21,7 @@ function fletcbv3_model(N = 5000; T = Float64, backend = nothing, kwargs...)
     h        = T(1) / rn1
     h2       = h^2
     half_p   = T(0.5) * p
-    coeff_l  = p * (-T(1) - T(2) / h2)
+    coeff_l  = p * (T(1) + T(2) / h2)  # P*-1-2/H2 = (1+2/H^2)*P > 0 (SIF param name is misleading)
     coeff_c  = -kappa / h2 * p  # = -KAPPA/H2*P = element contribution per term
 
     start = T[T(i) * h for i in 1:N]

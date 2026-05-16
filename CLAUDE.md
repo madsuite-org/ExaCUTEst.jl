@@ -111,7 +111,19 @@ For inequality groups (L type ≤ 0, G type ≥ 0), set `lcon`/`ucon` appropriat
 | EXP / EXPN | exp(v) | exp(v)/σ |
 
 Contribution formula: `F(v)/σ` where `v` is the raw group value and `F` is the type function.
-Without a GROUP TYPE the function is the identity (F(v) = v), i.e., contribution = v (scale ignored for identity since F(v)/σ = v/σ ≡ v for unscaled identity groups).
+Without a GROUP TYPE the function is the identity (F(v) = v), i.e., contribution = v for objective groups (scale ignored).
+
+**IMPORTANT — Identity-type constraints with SCALE:** For **constraint** groups (E/L/G type) with no GROUP TYPE and a SCALE σ, CUTEst reports the constraint residual as `v/σ`, NOT `v`. Encode these as `(expr - rhs) / σ`. See CUBENE: SQ(2) has SCALE=0.1, so constraint value = `(X(2) - X(1)^3) / 0.1`.
+
+### Variable ordering when loop starts from 0
+
+When a SIF VARIABLES section declares variables starting from index 0 (e.g., `DO I 0 N+1, X X(I), ND`), CUTEst's sifdecoder produces a **rotated** free-variable ordering:
+- X(N) → position 1 (last free variable wraps to front)
+- X(1) → position 2, X(2) → position 3, ..., X(N-1) → position N
+- Formula: `X(I)` maps to Julia index `mod(I, N) + 1` for I=1..N
+- Fixed variables (XX) still go to positions N+1, N+2 in declaration order
+
+This rotation occurs because sifdecoder moves the first-declared variable (X(0)) to the end, shifting all subsequent variables down; the last free variable wraps to position 1. See ARTIF, BDVALUE, BDVALUES for examples.
 
 ### Constraint ordering
 
