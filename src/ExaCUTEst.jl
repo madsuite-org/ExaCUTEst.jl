@@ -65,6 +65,7 @@ include("model.jl")
 
 export ExaCUTEstModel,
     cutest_oracle_model,
+    clear_oracle_cache,
     set_mastsif,
     mastsif,
     list_sif_problems,

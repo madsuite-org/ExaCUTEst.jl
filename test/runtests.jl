@@ -103,6 +103,16 @@ end
             "AKIVA"; external = :error)
         @test_throws ErrorException ExaCUTEstModel("AKIVA"; backend = :fake)
         @test_throws ErrorException ExaCUTEstModel("ROSENBR"; external = :nonsense)
+        @test_throws ErrorException ExaCUTEstModel("AKIVA"; T = Float32)
+
+        # the same problem twice used to fail with CUTEstException("memory
+        # allocation error"): the Fortran decoder allows one live model per
+        # name, and the oracle closures keep the first one open forever
+        nlp2 = ExaCUTEstModel("AKIVA")
+        @test obj(nlp2, nlp2.meta.x0) == obj(nlp, nlp.meta.x0)
+        # a sweep must not fail on repeats either
+        @test all(isfinite(obj(ExaCUTEstModel(n), ExaCUTEstModel(n).meta.x0))
+                  for n in ("AKIVA", "HS88", "AKIVA", "HS88"))
     end
 
     @testset "agreement with CUTEst.jl: $name" for name in AGREE

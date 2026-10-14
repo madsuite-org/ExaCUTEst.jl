@@ -14,6 +14,43 @@
 # sides call the same compiled routine -- which is why the validation census
 # records these problems as ORACLE_TIER rather than PASS.
 
+# One live CUTEstModel per problem name. The Fortran decoder keeps global
+# state keyed by name, so a second construction of the SAME problem fails with
+# CUTEstException(1, "memory allocation error") while the first is still open
+# -- and the first is always still open here, because the oracle closures hold
+# it for the model's whole life. Measured: building a problem twice failed,
+# building ten different ones in a row was fine, and an earlier model kept
+# evaluating correctly after a later one was built (so this is specifically a
+# repeat, not cross-contamination). Reusing the handle is also semantically
+# right: both models would be the same problem.
+const _ORACLE_REFS = Dict{String,Any}()
+
+function _oracle_ref(name::AbstractString)
+    key = String(name)
+    haskey(_ORACLE_REFS, key) && return _ORACLE_REFS[key]
+    return _ORACLE_REFS[key] = CUTEst.CUTEstModel(key)
+end
+
+"""
+    clear_oracle_cache()
+
+Finalize and forget every cached external-Fortran model, releasing the Fortran
+side's handles. Rarely needed: the cache holds one entry per external-Fortran
+problem actually loaded, at most 34. Any `ExaModel` built from a cleared entry
+stops working, so only call this when none are in use.
+"""
+function clear_oracle_cache()
+    for (_, ref) in _ORACLE_REFS
+        try
+            finalize(ref)
+        catch
+        end
+    end
+    n = length(_ORACLE_REFS)
+    empty!(_ORACLE_REFS)
+    return n
+end
+
 """
     cutest_oracle_model(path; T = Float64) -> ExaModel
 
@@ -25,7 +62,10 @@ function cutest_oracle_model(path::AbstractString; T = Float64)
     dir = dirname(abspath(path))
     name = replace(basename(path), r"\.SIF$" => "")
     ENV["MASTSIF"] = dir
-    ref = CUTEst.CUTEstModel(name)
+    T === Float64 || error("the external-Fortran tier is Float64-backed " *
+                           "(the compiled callbacks are double precision); " *
+                           "got T = $T")
+    ref = _oracle_ref(name)
     meta = ref.meta
     n, m = meta.nvar, meta.ncon
 

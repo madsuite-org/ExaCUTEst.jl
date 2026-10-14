@@ -42,6 +42,23 @@ the oracle tier belong here.
   decoded model is in SIF declaration order. Any comparison against CUTEst.jl
   must permute by SIF name (`sif_variable_names`, `sif_constraint_names`);
   comparing positionally will look like a decoder bug and is not one.
+- **One live Fortran model per problem name.** `cutest_oracle_model` caches
+  its `CUTEstModel` in `_ORACLE_REFS`, because the oracle closures keep it
+  open for the model's whole life and a second construction of the same
+  problem otherwise dies with `CUTEstException(1, "memory allocation
+  error")`. Measured: a repeat failed, ten different problems in a row were
+  fine, and an earlier model kept evaluating correctly after a later one was
+  built -- so it is specifically a repeat, not cross-contamination. The same
+  omission (not finalizing) is what cost `scripts/build_classification.jl`
+  two entries. `clear_oracle_cache()` releases the handles.
+- **The oracle tier's objective Hessian costs one Fortran `hprod` per Hessian
+  column.** `ScalarNonlinearOracle` accepts `hvp!`, not an explicit sparse
+  Hessian, so ExaModels reconstructs the objective block column by column
+  (`src/oracle.jl` in ExaModels, the `scalar_oracles` loop in `hess_coord!`).
+  Measured against CUTEst.jl's `hess_coord`: x4 at 2 columns (AKIVA), x7 at 6
+  (HS92), x24 at 57 (BA-L1LS). Constraint Hessians go through `hess!` in one
+  call and are unaffected. The fix is upstream -- `ScalarNonlinearOracle`
+  would need a `hess!` -- not a workaround here.
 - **The oracle tier cannot take a `backend`.** Opaque Fortran callbacks have
   no expression graph to vectorize. The constructor refuses the combination
   rather than silently building a CPU model.
