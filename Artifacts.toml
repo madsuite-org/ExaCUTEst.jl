@@ -1,0 +1,26 @@
+# SIF problem collections. Same artifacts CUTEst.jl v1.4.0 declares, so
+# ExaCUTEst reads exactly the problem files the Fortran reference reads --
+# without depending on CUTEst.jl or on a Fortran toolchain.
+[sifcollection]
+git-tree-sha1 = "1fa01d4c3b344b8cd32b8ef78c0abeac9bb9cce2"
+lazy = true
+
+    [[sifcollection.download]]
+    sha256 = "ed40196167b6cd07a0f37c3d7238d14c2dd3450582f83ad7e8d36318db08c7d4"
+    url = "https://github.com/ralna/SIF/releases/download/v2026.6.14/sifcollection-2026.6.14.tar.gz"
+
+[maros-meszaros]
+git-tree-sha1 = "8be9528187cd8b76df8791670a1160e8c232edcd"
+lazy = true
+
+    [[maros-meszaros.download]]
+    sha256 = "3b84f3a7b050568c7c4cc1ba53d8246d179339500710950f153d001ac59351e2"
+    url = "https://github.com/ralna/maros-meszaros/archive/refs/tags/v2026.6.2.tar.gz"
+
+[netlib-lp]
+git-tree-sha1 = "7b46a7788727994130b434cfbfd42defdb836715"
+lazy = true
+
+    [[netlib-lp.download]]
+    sha256 = "92b1cf7d972657a8755234890fe38b2afc3683364fcdd6824e13162b1a5e4eb8"
+    url = "https://github.com/ralna/netlib-lp/archive/refs/tags/v2026.6.2.tar.gz"
