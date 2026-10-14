@@ -72,6 +72,14 @@ the oracle tier belong here.
   packages loaded Julia binds neither, and the error reads
   `UndefVarError: list_sif_problems not defined`, which looks like a missing
   export and is not one. The test suite imports explicitly for this reason.
+- **Never hardcode an artifact's inner directory name.** These artifacts wrap
+  their files in a release-named directory that changes between releases.
+  Copying `optrove-maros-meszaros-9adfb5707b1e` from an older CUTEst.jl gave a
+  path that does not exist, and `mastsif()` then fell back to the default
+  collection, so `set_mastsif("maros-meszaros")` silently served the 1548
+  NLP problems — a wrong answer whose only symptom was a plausible count.
+  `_sif_dir` discovers the directory and refuses on ambiguity; `mastsif()`
+  errors on a set-but-invalid `MASTSIF` rather than falling back.
 - **Two collections exist and differ.** The active artifact is CUTEst.jl
   v1.4.0's `sifcollection` (1548 problems); v1.3.8's had 1540, and some shared
   problems differ in content (EQC, READING4). Pin deliberately when comparing

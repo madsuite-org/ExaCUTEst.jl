@@ -148,11 +148,44 @@ function oracle_entry(name, toks, cls)
     )
 end
 
-for line in eachline(db)
-    toks = split(line)
-    length(toks) >= 4 || continue
-    name = String(toks[1])
-    isfile(joinpath(dir, name * ".SIF")) || continue
+# CLASSF.DB plus the problems missing from it. Nine problems in the current
+# collection (the BA-L16/BA-L52 pairs, LRCOVTYPE, the four MNISTS*) load fine
+# but have no CLASSF.DB line, so taking the DB as the problem list silently
+# made them unselectable. Their SIF files carry their own classification
+# code, which is all that is needed.
+function classification_lines(dir, db)
+    out = Tuple{String,Vector{SubString{String}}}[]
+    seen = Set{String}()
+    for line in eachline(db)
+        toks = split(line)
+        length(toks) >= 4 || continue
+        name = String(toks[1])
+        isfile(joinpath(dir, name * ".SIF")) || continue
+        push!(seen, name)
+        push!(out, (name, toks))
+    end
+    for f in sort(readdir(dir))
+        endswith(f, ".SIF") || continue
+        name = f[1:end-4]
+        name in seen && continue
+        code = nothing
+        for ln in eachline(joinpath(dir, f))
+            m = match(r"^\*\s+classification\s+([A-Z]{3}[0-9]-[A-Z]{2}-\S+)", ln)
+            m === nothing && continue
+            code = m.captures[1]
+            break
+        end
+        code === nothing && (@warn "no classification code for $name"; continue)
+        # fields 3 and 4 of the code are nvar and ncon, each a number or V,
+        # which is exactly what CLASSF.DB's columns 3 and 4 carry
+        parts = split(code, '-')
+        length(parts) >= 4 || (@warn "malformed code for $name: $code"; continue)
+        push!(out, (name, SubString.([name, code, parts[3], parts[4]], 1)))
+    end
+    return out
+end
+
+for (name, toks) in classification_lines(dir, db)
     cls = try
         ExaCUTEst.parse_classification(toks[2])
     catch
@@ -214,12 +247,7 @@ println("  $nchecked problems agree on all 11 metadata fields")
 # and the omission reads as "that problem is not in the collection". Earlier
 # this script wrote 1537 of 1539 entries and reported the shortfall only as a
 # count in a trailing line.
-expected = 0
-for line in eachline(db)
-    toks = split(line)
-    length(toks) >= 4 || continue
-    isfile(joinpath(dir, String(toks[1]) * ".SIF")) && (global expected += 1)
-end
+expected = length(classification_lines(dir, db))
 length(entries) == expected || error(
     "built $(length(entries)) of $expected entries ($nfail failed): refusing " *
     "to write a partial classification table")

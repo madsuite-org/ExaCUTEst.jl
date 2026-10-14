@@ -63,7 +63,7 @@ filter(is_truly_unconstrained, select_sif_problems())
 
 Selection reads `src/classf.json`, built by `scripts/build_classification.jl`: classification letters from the collection's `CLASSF.DB`, sizes and bound/row-type counts from decoding every problem. Regenerating it needs no Fortran toolchain for the 1509 decodable problems in the table; the other 30 (external Fortran, of the 34 total — 4 are absent from `CLASSF.DB`) take their metadata from the compiled routine.
 
-That table is checked against CUTEst.jl's own Fortran-derived `classf.json` by `scripts/compare_classification.jl`: **identical on all 19 fields across all 1539 classifiable problems**, so selection returns the same sets CUTEst.jl's does.
+That table is checked against CUTEst.jl's own Fortran-derived `classf.json` by `scripts/compare_classification.jl`: **identical on all 19 fields across all 1539 problems CUTEst.jl classifies**. Ours covers all 1548 — nine problems (the `BA-L16`/`BA-L52` pairs, `LRCOVTYPE`, the four `MNISTS*`) are absent from `CLASSF.DB` and so unselectable in CUTEst.jl, and are picked up here from their SIF files' own classification lines.
 
 ## Correctness
 

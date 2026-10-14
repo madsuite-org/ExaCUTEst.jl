@@ -2591,6 +2591,60 @@
       "number": 57
     }
   },
+  "BA-L16": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 167436,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 167436,
+      "number": 167436
+    },
+    "contype": "general",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "none",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 66462,
+      "number": 66462
+    }
+  },
+  "BA-L16LS": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 0,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 0,
+      "number": 0
+    },
+    "contype": "unc",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "sum_of_squares",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 66462,
+      "number": 66462
+    }
+  },
   "BA-L1LS": {
     "constraints": {
       "can_choose": false,
@@ -2778,6 +2832,60 @@
       "fixed": 0,
       "free": 23769,
       "number": 23769
+    }
+  },
+  "BA-L52": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 694346,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 694346,
+      "number": 694346
+    },
+    "contype": "general",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "none",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 192627,
+      "number": 192627
+    }
+  },
+  "BA-L52LS": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 0,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 0,
+      "number": 0
+    },
+    "contype": "unc",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "sum_of_squares",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 192627,
+      "number": 192627
     }
   },
   "BA-L73": {
@@ -23516,6 +23624,33 @@
       "number": 123
     }
   },
+  "LRCOVTYPE": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 0,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 0,
+      "number": 0
+    },
+    "contype": "unc",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "other",
+    "origin": "academic",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 54,
+      "number": 54
+    }
+  },
   "LRIJCNN1": {
     "constraints": {
       "can_choose": false,
@@ -26862,6 +26997,114 @@
       "fixed": 0,
       "free": 8,
       "number": 9
+    }
+  },
+  "MNISTS0": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 60000,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 60000,
+      "number": 60000
+    },
+    "contype": "general",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "none",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 494,
+      "number": 494
+    }
+  },
+  "MNISTS0LS": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 0,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 0,
+      "number": 0
+    },
+    "contype": "unc",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "sum_of_squares",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 494,
+      "number": 494
+    }
+  },
+  "MNISTS5": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 60000,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 60000,
+      "number": 60000
+    },
+    "contype": "general",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "none",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 494,
+      "number": 494
+    }
+  },
+  "MNISTS5LS": {
+    "constraints": {
+      "can_choose": false,
+      "equality": 0,
+      "ineq_above": 0,
+      "ineq_below": 0,
+      "ineq_both": 0,
+      "linear": 0,
+      "nonlinear": 0,
+      "number": 0
+    },
+    "contype": "unc",
+    "derivative_order": 2,
+    "has_internal_var": false,
+    "objtype": "sum_of_squares",
+    "origin": "modelling",
+    "regular": true,
+    "variables": {
+      "bounded_above": 0,
+      "bounded_below": 0,
+      "bounded_both": 0,
+      "can_choose": false,
+      "fixed": 0,
+      "free": 494,
+      "number": 494
     }
   },
   "MODBEALE": {

@@ -57,6 +57,32 @@ end
         @test first(ExaCUTEst.generator_sif_problems(; filter = n -> n == "ROSENBR")) == "ROSENBR"
     end
 
+    @testset "collection switching" begin
+        # each set must resolve to its OWN directory. Hardcoding the
+        # artifacts' inner directory names (taken from an older CUTEst.jl)
+        # gave a path that does not exist, and mastsif() then silently served
+        # the default 1548-problem collection -- a wrong answer whose only
+        # symptom was a plausible-looking count.
+        main = ExaCUTEst.set_mastsif("sifcollection")
+        nmain = length(ExaCUTEst.list_sif_problems())
+        mm = ExaCUTEst.set_mastsif("maros-meszaros")
+        nmm = length(ExaCUTEst.list_sif_problems())
+        @test isdir(main) && isdir(mm)
+        @test main != mm
+        @test nmain > 1500
+        @test 100 < nmm < 500          # 138 today; not the main collection
+        @test nmm != nmain
+        @test "AUG2D" in ExaCUTEst.list_sif_problems()      # a Maros-Meszaros QP
+        @test_throws ErrorException ExaCUTEst.set_mastsif("not-a-set")
+
+        # a MASTSIF that is set but wrong must error, not fall back
+        saved = ENV["MASTSIF"]
+        ENV["MASTSIF"] = joinpath(saved, "definitely_not_here")
+        @test_throws ErrorException ExaCUTEst.mastsif()
+        ENV["MASTSIF"] = main
+        @test ExaCUTEst.mastsif() == main
+    end
+
     @testset "parameter arguments" begin
         # the three sifdecoder spellings must agree, and with the params kwarg
         a = ExaCUTEstModel("READING4", "-param", "N=100")
