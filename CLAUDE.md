@@ -20,6 +20,62 @@ scripts/
 test/runtests.jl      # API contract + agreement with CUTEst.jl on a sample
 ```
 
+## Roadmap (Sungho, 2026-10-16) -- the plan of record
+
+Verbatim: "verify the callbacks for the models with exernal fortran code ->
+port all the fortran code to julia (perhaps in a gpu compatible way) -> verify
+the pure julia version of 32 instances (callback only) -> work on gpu
+compatibility, we want to be able to create a model with scalar indexing
+disabled, and callbacks are verified against cpu impl (over all 15k
+instances) -> the full verification again (on cpu, gpu, differenet
+precisions) to make sure we have correct impl -> done!"
+
+1. **Verify the oracle callbacks.** Our ASSEMBLY of the Fortran, not the
+   Fortran: sparsity patterns, the obj_weight/multiplier conventions, the
+   Lagrangian Hessian split between the scalar and vector oracles. Comparing
+   against CUTEst.jl cannot confirm the Fortran (both call it) but the wiring
+   is ours and can be wrong. Script: scratch oracle_assembly.jl, to be landed.
+2. **Port all 32 external-Fortran problems to Julia**, GPU-compatible where
+   possible. Only the VALUE function needs porting -- ExaModels differentiates
+   it, so the Fortran's hand-coded G/H arrays are not ported, which also
+   avoids the error class that killed the HS67 attempt. Highest leverage: the
+   12 BA-L* problems share ONE element, the standard Snavely bundle-adjustment
+   reprojection (Rodrigues rotation, radial distortion 1 + k1 r^2 + k2 r^4,
+   focal scaling), with a YRES parameter picking the x/y component and the
+   observation arriving as the SIF group constant.
+3. **Verify the pure-Julia 32 against the Fortran callbacks** -- this one IS
+   independent, unlike step 1, because the two implementations are genuinely
+   different. It is what caught HS67.
+4. **GPU compatibility.** Acceptance criterion, stated concretely: a model
+   must be constructible with **scalar indexing disabled**
+   (`CUDA.allowscalar(false)`), and its callbacks verified against the CPU
+   implementation **over the whole collection**, not a sample. ("15k" in the
+   dictation is 1.5k, i.e. the 1548 problems.)
+5. **Full verification again**: CPU, GPU, and multiple precisions.
+
+Until step 2 lands, GPU verification stays out of scope (see below) and
+solver testing is explicitly NOT wanted: "solve is not a too much concern
+now; don't run solver testing" (2026-10-16). Partial solver results from the
+sweep that was stopped are in runs/solve_results.s*.tsv -- 1050 of 1516
+problems, kept for reference, not a deliverable.
+
+## Readiness priorities (Sungho, 2026-10-16)
+
+GPU verification across the collection is **deliberately not a goal at this
+stage**: "I don't think it's needed at this stage; it's gonna be easy once we
+complete the cpu impl". 15 problems are GPU-verified (13 in
+ExaModelsSIF's test/gpusmoke.jl plus the two native models) and that is
+enough of a smoke test. Do not spend compute on a full GPU build sweep, and
+do not list it as an outstanding gap.
+
+Solver testing is NOT wanted at this stage either (2026-10-16). The
+oracle tier's Hessian cost -- an explicit `hess!` on ExaModels'
+`ScalarNonlinearOracle`, measured as taking RAYBENDS' Hessian from 63.6 s to
+~32 ms -- mattered only for solvability, so it is parked. Porting those
+problems to Julia (roadmap step 2) removes the oracle Hessian problem
+entirely rather than optimizing it, which is the better reason to prefer the
+port.
+
 ## The native tier (src/native/)
 
 A hand-written model lives here only if BOTH hold: the SIF uses external
