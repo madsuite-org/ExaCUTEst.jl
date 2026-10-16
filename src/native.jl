@@ -2,7 +2,19 @@
 #
 # A problem lands here only when BOTH hold: its SIF file uses external Fortran
 # (so sif_decode refuses it), and the Fortran computes something Julia can
-# express exactly. The gain over the oracle tier is real -- a native model is
+# express exactly.
+#
+# TWO SHAPES live here. HS68/HS69 are small enough to write as ExaModels
+# expressions directly. The BA-L* family is NOT: its reprojection chain is
+# ~30 operations deep, and built as an expression it did not finish compiling
+# in an hour on a 57-variable problem, because ExaModels nests a type
+# parameter per operation. That family is instead a GENERIC JULIA FUNCTION
+# interfaced as an external oracle, with derivatives by AD over it (Sungho
+# 2026-10-16: "it should be a generic julia function" ... "this generic julia
+# function can be interfaced with ExaModels as an external oracle"). Prefer
+# that shape for anything non-trivial: it compiles like ordinary Julia, it is
+# generic over the element type for free, and being allocation- and
+# branch-free it is callable from a GPU kernel. The gain over the oracle tier is real -- a native model is
 # a SIMD-abstracted ExaModel that runs on a GPU, where an oracle is a CPU
 # Fortran callback whose Hessian costs one hprod per column.
 #
@@ -14,6 +26,7 @@
 
 include("native/HS68.jl")
 include("native/HS69.jl")
+include("native/BA.jl")
 
 """
     NATIVE_MODELS :: Dict{String,Function}
@@ -25,6 +38,9 @@ oracle tier, so they accept a `backend` and run on a GPU.
 const NATIVE_MODELS = Dict{String,Function}(
     "HS68" => hs68_model,
     "HS69" => hs69_model,
+    (p => (; kwargs...) -> ba_oracle_model(p; kwargs...)
+     for p in ("BA-L1", "BA-L1LS", "BA-L16", "BA-L16LS", "BA-L21", "BA-L21LS",
+               "BA-L49", "BA-L49LS", "BA-L52", "BA-L52LS", "BA-L73", "BA-L73LS"))...,
 )
 
 """

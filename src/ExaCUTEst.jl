@@ -19,6 +19,7 @@ using NLPModels
 import CUTEst
 import JSON
 import SpecialFunctions
+import ForwardDiff
 
 # Problems whose element/group functions are external Fortran: the decoder
 # cannot translate them, so they go through the CUTEst-backed oracle tier.
@@ -80,6 +81,8 @@ export ExaCUTEstModel,
     external_fortran_problems,
     native_problems,
     oracle_tier_problems,
+    ba_residual,
+    ba_oracle_model,
     sif_variable_names,
     sif_constraint_names,
     row_linearity

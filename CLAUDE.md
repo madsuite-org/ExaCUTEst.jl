@@ -43,17 +43,28 @@ precisions) to make sure we have correct impl -> done!"
    BA-L52 checkable at all -- 192627 variables, where the full matrix would
    mean ~192k Fortran calls. Caveat: three directions is a sample, so a wrong
    row orthogonal to all six probes would slip through.
-2. **Port all 32 external-Fortran problems to Julia**, GPU-compatible where
-   possible. Only the VALUE function needs porting -- ExaModels differentiates
-   it, so the Fortran's hand-coded G/H arrays are not ported, which also
-   avoids the error class that killed the HS67 attempt. Highest leverage: the
-   12 BA-L* problems share ONE element, the standard Snavely bundle-adjustment
-   reprojection (Rodrigues rotation, radial distortion 1 + k1 r^2 + k2 r^4,
-   focal scaling), with a YRES parameter picking the x/y component and the
-   observation arriving as the SIF group constant.
-3. **Verify the pure-Julia 32 against the Fortran callbacks** -- this one IS
-   independent, unlike step 1, because the two implementations are genuinely
-   different. It is what caught HS67.
+2. **Port all 32 external-Fortran problems to Julia.** THE SHAPE MATTERS, and
+   getting it wrong cost a day: the port is a **generic Julia function**
+   interfaced to ExaModels as an **external oracle**, NOT an ExaModels
+   expression (Sungho 2026-10-16: "it should be a generic julia function" ...
+   "this generic julia function can be interfaced with ExaModels as an
+   external oracle"). Building the BA reprojection as a symbolic expression
+   inside a SIF element did not finish compiling in an hour on a
+   57-VARIABLE problem, because ExaModels nests a type parameter per
+   operation and the chain is ~30 deep; the same computation as a plain
+   function builds the model in 0.3-7 s. A generic function also evaluates in
+   Float64/Float32/BigFloat with no extra code (step 5 for free) and, being
+   allocation- and branch-free, is callable from a GPU kernel (step 4).
+   Derivatives come from AD over the one function, so the Fortran's
+   hand-coded G/H arrays are never ported -- the error class that made the
+   legacy HS67 port wrong in the 4th digit.
+   **BA-L* family DONE 2026-10-16: 12/12, all callbacks match the Fortran**
+   (`src/native/BA.jl`, `test/ba_verify.jl`,
+   `runs/ba_verify_2026-10-16.tsv`). Oracle tier 32 -> 20.
+3. **Verify the pure-Julia versions against the Fortran callbacks** -- this
+   one IS independent, unlike step 1, because the two implementations are
+   genuinely different. It is what caught HS67. Done for the 12 BA-L*
+   problems; 20 to go.
 4. **GPU compatibility.** Acceptance criterion, stated concretely: a model
    must be constructible with **scalar indexing disabled**
    (`CUDA.allowscalar(false)`), and its callbacks verified against the CPU
