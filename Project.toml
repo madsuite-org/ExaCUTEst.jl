@@ -11,6 +11,7 @@ ExaModelsSIF = "7f0b2a4e-8c3d-4a9b-9e6f-5b2a1c9d8e01"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LazyArtifacts = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 # ExaModels tracks the branch carrying the SIMD/oracle work this package
 # needs. ExaModelsSIF is still a private repo, so it resolves through a
@@ -26,6 +27,7 @@ ExaModels = "0.12"
 ExaModelsSIF = "0.1"
 JSON = "0.21, 1"
 NLPModels = "0.21.12"
+SpecialFunctions = "2"
 julia = "1.10"
 
 [extras]

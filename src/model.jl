@@ -29,9 +29,10 @@ as an `ExaModel`. `name` may also be a path to a `.SIF` file.
 - `params`: parameter overrides as a `Dict`, e.g. `Dict("N" => 100)`.
   Equivalent to `args...`; merged, with `params` winning on a clash.
 - `external`: what to do when a problem's element/group functions are
-  hand-coded external Fortran (34 problems in the collection).
-  `:oracle` (default) wraps the compiled Fortran as ExaModels oracles, which
-  needs `using CUTEst`; `:error` raises `ExaModelsSIF.ExternalFortranError`.
+  hand-coded external Fortran (34 problems in the collection, of which two
+  have verified native models -- see [`native_problems`](@ref) -- leaving 32
+  on the oracle tier). `:oracle` (default) wraps the compiled Fortran as
+  ExaModels oracles; `:error` raises `ExaModelsSIF.ExternalFortranError`.
 - `kwargs...`: forwarded to `ExaModelsSIF.sif_decode`.
 
 # Examples
@@ -51,6 +52,12 @@ function ExaCUTEstModel(name::AbstractString, args...; T = Float64,
     allparams = merge(_parse_param_args(args), Dict{String,Any}(params))
     external in (:oracle, :error) ||
         error("external must be :oracle or :error, got :$external")
+    # A verified native model beats both the decoder (which refuses these) and
+    # the oracle tier (CPU-only), so prefer it. Only external-Fortran problems
+    # have entries, so this cannot shadow a decodable problem.
+    if isempty(allparams) && haskey(NATIVE_MODELS, String(name))
+        return NATIVE_MODELS[String(name)](; T, backend)
+    end
     try
         return ExaModelsSIF.sif_model(path; T, backend, params = allparams, kwargs...)
     catch e

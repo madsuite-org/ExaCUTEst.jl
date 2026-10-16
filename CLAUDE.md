@@ -9,6 +9,7 @@ thing to keep correct (that is what 0.1 was, and why it was removed).
 ```
 src/
   ExaCUTEst.jl        # module: deps, the external-Fortran name list, exports
+  native.jl           # NATIVE_MODELS registry; native/ holds the models
   collection.jl       # set_mastsif / list_sif_problems / sif_problem_path
   classification.jl   # select_sif_problems + classf.json loading
   classf.json         # generated; do not hand-edit
@@ -18,6 +19,26 @@ scripts/
   build_classification.jl   # regenerates src/classf.json
 test/runtests.jl      # API contract + agreement with CUTEst.jl on a sample
 ```
+
+## The native tier (src/native/)
+
+A hand-written model lives here only if BOTH hold: the SIF uses external
+Fortran (so the decoder refuses it), AND the Fortran computes something Julia
+expresses exactly. Today that is `HS68` and `HS69`, whose Fortran is just the
+normal CDF. They are preferred over the oracle tier, so they accept a
+`backend`.
+
+Adding one without validating it against a `CUTEstModel` is worse than
+leaving it on the oracle tier, because a hand-written model is wrong
+*silently*. The legacy 0.1 port offered three candidates and one failed:
+`HS67` swaps the Fortran's fixed-point iteration for closed-form roots and is
+off in the fourth digit. It is not a rounding artifact -- the Fortran's
+derivatives are those of the finite iteration, not of the exact fixed point.
+Do not resurrect it without re-deriving the iteration itself.
+
+Never put a DECODABLE problem here. The decoder is validated over the whole
+collection; a hand-written duplicate would just be a second thing to keep
+correct, which is exactly what 0.2 removed.
 
 ## Division of labour
 
@@ -52,13 +73,33 @@ the oracle tier belong here.
   omission (not finalizing) is what cost `scripts/build_classification.jl`
   two entries. `clear_oracle_cache()` releases the handles.
 - **The oracle tier's objective Hessian costs one Fortran `hprod` per Hessian
-  column.** `ScalarNonlinearOracle` accepts `hvp!`, not an explicit sparse
-  Hessian, so ExaModels reconstructs the objective block column by column
-  (`src/oracle.jl` in ExaModels, the `scalar_oracles` loop in `hess_coord!`).
-  Measured against CUTEst.jl's `hess_coord`: x4 at 2 columns (AKIVA), x7 at 6
-  (HS92), x24 at 57 (BA-L1LS). Constraint Hessians go through `hess!` in one
-  call and are unaffected. The fix is upstream -- `ScalarNonlinearOracle`
-  would need a `hess!` -- not a workaround here.
+  column, and that is what makes most of these problems unsolvable.**
+  `ScalarNonlinearOracle` accepts `hvp!`, not an explicit sparse Hessian, so
+  ExaModels reconstructs the objective block column by column (ExaModels
+  `src/oracle.jl`, the `scalar_oracles` loop in `hess_coord!`). Measured
+  2026-10-16, one Hessian evaluation, oracle versus CUTEst.jl's single call:
+
+  | problem | hess cols | CUTEst | oracle | hprod x cols |
+  |---|---|---|---|---|
+  | PARKCH | 15 | 425 ms | 6.34 s | 9.25 s |
+  | BLEACHNG | 17 | 504 ms | 8.55 s | 8.53 s |
+  | RAYBENDS | 2050 | 31.6 ms | 63.6 s | 62.0 s |
+
+  The oracle cost tracks `hprod x ncols`, which is what identifies the
+  mechanism rather than merely correlating with it. RAYBENDS' single Hessian
+  exceeds a 60 s solver budget, so it reports zero iterations; an explicit
+  `hess!` would take it from 63.6 s to ~32 ms. Note PARKCH and BLEACHNG are
+  ALSO intrinsically slow (one hprod is ~0.5 s), so both factors are real --
+  do not attribute everything to the reconstruction. Constraint Hessians go
+  through `hess!` in one call and are unaffected. The fix is upstream, a
+  `hess!` on `ScalarNonlinearOracle`, not a workaround here.
+- **Solver results for the oracle tier are archived** in
+  `runs/oracle_tier_madnlp_2026-10-16.tsv`: MadNLP solves 15 of the 34, four
+  exhaust a 60 s budget, 14 are killed inside a single evaluation at 260 s,
+  and VANDANIUMS reports infeasible. Re-run with
+  `scripts/solve_oracle_tier.sh` -- one process per problem with a hard
+  timeout, because a first attempt that ran them in one process wedged on
+  BA-L16LS and produced nothing in two hours.
 - **The oracle tier cannot take a `backend`.** Opaque Fortran callbacks have
   no expression graph to vectorize. The constructor refuses the combination
   rather than silently building a CPU model.

@@ -18,6 +18,7 @@ using ExaModelsSIF
 using NLPModels
 import CUTEst
 import JSON
+import SpecialFunctions
 
 # Problems whose element/group functions are external Fortran: the decoder
 # cannot translate them, so they go through the CUTEst-backed oracle tier.
@@ -60,6 +61,7 @@ const _EXTERNAL_FORTRAN = String[
 
 include("collection.jl")
 include("classification.jl")
+include("native.jl")
 include("oracle.jl")
 include("model.jl")
 
@@ -76,6 +78,8 @@ export ExaCUTEstModel,
     parse_classification,
     is_truly_unconstrained,
     external_fortran_problems,
+    native_problems,
+    oracle_tier_problems,
     sif_variable_names,
     sif_constraint_names,
     row_linearity

@@ -16,13 +16,18 @@
 import ExaCUTEst
 using ExaCUTEst: ExaCUTEstModel, row_linearity, sif_variable_names,
     sif_constraint_names, classification, is_truly_unconstrained,
-    external_fortran_problems, sif_problem_path
+    external_fortran_problems, sif_problem_path, native_problems,
+    oracle_tier_problems
 using Test, LinearAlgebra, SparseArrays, Random
 using NLPModels
 using CUTEst
 
+# HS68 and HS69 are in this list deliberately: they are external-Fortran
+# problems served by hand-written native models, so agreement with CUTEst is
+# the ONLY thing standing between them and a silently wrong model. For the
+# decoded problems the full-collection sweep upstream already covers that.
 const AGREE = ["ROSENBR", "HS14", "HS35", "HS45", "DECONVC", "BROWNAL",
-               "GENHS28", "DEGDIAG", "AVGASB", "LUKVLE14"]
+               "GENHS28", "DEGDIAG", "AVGASB", "LUKVLE14", "HS68", "HS69"]
 
 relerr(a, b) = begin
     m = isfinite.(a)
@@ -141,6 +146,32 @@ end
                   for n in ("AKIVA", "HS88", "AKIVA", "HS88"))
     end
 
+    @testset "native models" begin
+        nat = native_problems()
+        orc = oracle_tier_problems()
+        @test nat == ["HS68", "HS69"]
+        @test isempty(intersect(nat, orc))
+        @test sort(vcat(nat, orc)) == sort(external_fortran_problems())
+        @test length(orc) == 32
+        # A native model must NOT get the oracle tier's backend refusal --
+        # preferring the native model is the whole point. Asserted on the
+        # MESSAGE, not on an exception type: what a nonsense backend throws
+        # downstream is Julia's business, not this package's contract.
+        errmsg(f) = try (f(); nothing) catch e; sprint(showerror, e) end
+        refusal = "cannot be placed on a `backend`"
+        @test occursin(refusal, errmsg(() -> ExaCUTEstModel("AKIVA"; backend = :fake)))
+        let m = errmsg(() -> ExaCUTEstModel("HS68"; backend = :fake))
+            @test m === nothing || !occursin(refusal, m)
+        end
+        # ... and external = :error must not reject a problem we serve natively
+        @test ExaCUTEstModel("HS68"; external = :error) isa Any
+        @test_throws ExaCUTEst.ExaModelsSIF.ExternalFortranError ExaCUTEstModel(
+            "AKIVA"; external = :error)
+        # HS67 was rejected for disagreeing with the reference in the 4th
+        # digit; it must stay on the oracle tier
+        @test "HS67" in orc
+    end
+
     @testset "agreement with CUTEst.jl: $name" for name in AGREE
         ref = CUTEstModel(name)
         try
@@ -148,10 +179,20 @@ end
             @test nlp.meta.nvar == ref.meta.nvar
             @test nlp.meta.ncon == ref.meta.ncon
 
-            vp = indexin(refnames(ref, :var), sif_variable_names(name))
+            # Decoded models are in SIF declaration order, so they must be
+            # permuted by name. NATIVE models are hand-written in CUTEst's own
+            # ordering and cannot be permuted that way at all -- they have no
+            # decode, so sif_variable_names would raise ExternalFortranError.
+            isnative = name in native_problems()
+            vp, perm = if isnative
+                collect(1:ref.meta.nvar), collect(1:ref.meta.ncon)
+            else
+                v = indexin(refnames(ref, :var), sif_variable_names(name))
+                c = ref.meta.ncon > 0 ?
+                    indexin(refnames(ref, :con), sif_constraint_names(name)) : Int[]
+                v, c
+            end
             @test !any(isnothing, vp)
-            cn = sif_constraint_names(name)
-            perm = ref.meta.ncon > 0 ? indexin(refnames(ref, :con), cn) : Int[]
             @test !any(isnothing, perm)
 
             Random.seed!(7)
