@@ -30,11 +30,19 @@ disabled, and callbacks are verified against cpu impl (over all 15k
 instances) -> the full verification again (on cpu, gpu, differenet
 precisions) to make sure we have correct impl -> done!"
 
-1. **Verify the oracle callbacks.** Our ASSEMBLY of the Fortran, not the
-   Fortran: sparsity patterns, the obj_weight/multiplier conventions, the
-   Lagrangian Hessian split between the scalar and vector oracles. Comparing
-   against CUTEst.jl cannot confirm the Fortran (both call it) but the wiring
-   is ours and can be wrong. Script: scratch oracle_assembly.jl, to be landed.
+1. **Verify the oracle callbacks. DONE 2026-10-16: 32/32 ASSEMBLY_OK, no
+   mismatches** (`test/oracle_assembly.jl`,
+   `runs/oracle_assembly_2026-10-16.tsv`). Verifies our ASSEMBLY of the
+   Fortran, not the Fortran: sparsity patterns, obj_weight/multiplier
+   conventions, the Lagrangian Hessian split between the scalar and vector
+   oracles. Comparing against CUTEst.jl cannot confirm the Fortran (both call
+   it) but the wiring is ours and can be wrong; it isn't.
+   Hessians are compared as Hessian-VECTOR products (Sungho: "for those just
+   use hessian vectors") with three random directions at each of two points,
+   plus the full matrix wherever it is cheap to materialize. That is what made
+   BA-L52 checkable at all -- 192627 variables, where the full matrix would
+   mean ~192k Fortran calls. Caveat: three directions is a sample, so a wrong
+   row orthogonal to all six probes would slip through.
 2. **Port all 32 external-Fortran problems to Julia**, GPU-compatible where
    possible. Only the VALUE function needs porting -- ExaModels differentiates
    it, so the Fortran's hand-coded G/H arrays are not ported, which also
@@ -75,6 +83,24 @@ oracle tier's Hessian cost -- an explicit `hess!` on ExaModels'
 problems to Julia (roadmap step 2) removes the oracle Hessian problem
 entirely rather than optimizing it, which is the better reason to prefer the
 port.
+
+## Two traps that cost real time on 2026-10-16
+
+- **Any script that builds CUTEst models must hold the pidlock**
+  (`mkpidlock("/tmp/cutest-decode.pid"; wait = true)`). CUTEst decodes and
+  compiles every problem into ONE shared directory, so concurrent builds
+  collide and report `Unable to compile a shared library for the problem` --
+  which reads exactly like a broken problem and is not. Step 1 reported that
+  for BA-L21LS, BA-L49, BA-L49LS and BA-L52; under the lock all four are
+  ASSEMBLY_OK.
+- **BA-L52 and BA-L52LS take ~1035 s to COMPILE** (the others in the family
+  take 6-8 s). Any sweep with a per-problem process timeout under ~20 minutes
+  records them as timeouts, which is what made them look unsolvable in the
+  solver board. Budget for the build separately from the solve.
+  Worth stating as a correction: a "BA-L52 cannot be built, reproduced in
+  isolation" claim was recorded here earlier and was WRONG -- that probe ran
+  while step 1 was concurrently using the shared compile directory, i.e. it
+  failed to control for the very confound named in the bullet above.
 
 ## The native tier (src/native/)
 
