@@ -32,6 +32,10 @@ include("native/HS88_92.jl")
 include("native/LOGIT.jl")
 include("native/SARO.jl")
 include("native/HS67_85.jl")
+# after LOGIT.jl: PARKCH/STRATEC reuse hielow_parse/hielow_loglik, because their
+# SIFs append the SAME SUBROUTINE HIELOW (204 lines byte-identical once
+# comments and DATA are stripped)
+include("native/PARKCH_STRATEC.jl")
 
 """
     NATIVE_MODELS :: Dict{String,Function}
@@ -59,6 +63,8 @@ const NATIVE_MODELS = Dict{String,Function}(
     "SAROMM" => saromm_model,
     "HS67" => hs67_model,
     "HS85" => hs85_model,
+    "PARKCH" => parkch_model,
+    "STRATEC" => stratec_model,
 )
 
 """

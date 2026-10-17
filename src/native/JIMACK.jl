@@ -79,12 +79,19 @@
 #       EPS   = 0.009999999776482582
 #       W     = 0.5773502588272095
 #
-# and NOT 0.1, 0.01, 0.577350269189. This is load-bearing: measured against
-# `CUTEstModel("JIMACK")` at x0 and at a perturbed point, the single-precision
-# reading reproduces `obj` to ~1e-16 relative while the Float64 reading is off
-# by ~4e-9 -- seven orders of magnitude, far outside roundoff, i.e. a different
-# function. `fortran_literals = :double` keeps the Float64 reading available
-# for exactly that comparison; `:single` (the default) is the Fortran.
+# and NOT 0.1, 0.01, 0.577350269189. The data DISCRIMINATES, decisively.
+# Measured against `CUTEstModel("JIMACK")` at x0 and at a perturbed point
+# (~/git/scratch/jimack_verify.jl), with the group-scale artifact below taken
+# out:
+#
+#                       obj rel      grad rel (2-norm)
+#     :single (Fortran)  0 (bitwise)  5.3e-16 / 6.2e-15
+#     :double (naive)    1.5e-8       3.1e-8  / 2.2e-6
+#
+# `:single` is EXACT -- the objective comes back bit for bit -- and `:double`
+# misses by 1e-8, eight orders of magnitude out and nowhere near roundoff, i.e.
+# a different function. `fortran_literals = :double` is kept only so the two
+# readings can be compared; `:single` is the default and is the Fortran.
 # Note `DELTA` ALSO appears in the SIF DATA sections, where it is a proper
 # double 0.1 and sets the objective's group scale to 2*M*N^2/DELTA = 17280.
 # Both readings use that same scale; only the Fortran's copy is rounded.
@@ -92,6 +99,22 @@
 # (`4.5D-1`, `3.1D+0`, `6.5D-1`, `5.0D-1`, `2.0D+0 / RN`), and `IEINT`, `IPHI`
 # and `PSI` declare every variable they use, so there is no implicit-typing
 # trap inside the three routines -- only in the SIF-generated preamble.
+#
+# A SECOND, SEPARATE PRECISION LOSS, AND IT IS CUTEst'S. SIFdecode writes the
+# reciprocal group scale into OUTSDIF.d in an 11-significant-digit `E` format:
+#
+#     $ grep D-05 OUTSDIF_JIMACK.d   ->   5.7870370370D-05
+#
+# while 1/17280 = 5.787037037037037e-5. CUTEst reads that truncated number back
+# and multiplies the group value by it, so every CUTEst quantity for this
+# problem -- obj, grad, Hessian alike -- is uniformly (1 - 6.400e-12) times the
+# exactly scaled one. This model divides by 17280 instead, so a raw comparison
+# against CUTEst shows a FLAT 6.400e-12 relative difference at every point and
+# in every quantity. That is CUTEst's text round-trip, not this port: multiply
+# by `5.7870370370e-5 * 17280` and the objective agrees bit for bit. (The same
+# 11-digit format is why CUTEst's x0 differs from the decode at ~3e-12; the
+# verification script evaluates both models at CUTEst's x0, so that cancels.)
+# Do not "fix" this by hard-coding the truncated constant.
 #
 # SHAPE: a generic Julia function behind a `ScalarNonlinearOracle`.
 # Not folded: the energy depends on the element's 24 VARIABLES, so it is not a
@@ -129,8 +152,16 @@
 #
 # ON COMPARING THE HESSIAN. JIMACK's classification is `OUR2-AN-3549-0` -- 4th
 # character `2`, and the SIF's `INDIVIDUALS` block does supply a full `H`
-# section -- so CUTEst's Hessian is a real one and is compared directly
-# (as `hprod`, since the matrix is 3549x3549).
+# section -- so CUTEst's Hessian is a real one, unlike SARO's, and is compared
+# directly. As `hprod`, since the matrix is 3549x3549: four random directions at
+# each of two points agree to 4.1e-16 (at x0) and 2.5e-14 .. 1.2e-13 (at a
+# perturbed point, where |Hv| ~ 1e7 and both sides sum 864 cancelling element
+# blocks). This port's sparsity pattern independently has exactly CUTEst's
+# `nnzh = 118824`. Two further checks that do not go through CUTEst's Hessian at
+# all: a central difference of CUTEst's own gradient, which both sides miss by
+# the SAME amount to 4 significant digits; and the rigid TRANSLATION direction,
+# a null vector of the exact Hessian because the energy sees only grad u
+# (|H*1| = 2.0e-15 here, 2.4e-13 for CUTEst, against |H*v| ~ 2e3).
 
 # The 8 vertices of a cell, in the order the Fortran sums them:
 #
@@ -450,20 +481,19 @@ come from `sif_decode(...; external = :defer)`.
 `fortran_literals` selects how the three bare GLOBALS constants `DELTA = 0.1`,
 `EPS = 0.01` and `W = 0.577350269189` are read. `:single` (the default) is
 what gfortran compiles -- a bare Fortran real literal is default REAL, so each
-is rounded through Float32 before widening; `:double` is the naive reading, and
-is wrong by ~4e-9 relative against CUTEst. It is kept only so the two can be
-compared. See the header.
+is rounded through Float32 before widening -- and reproduces CUTEst's objective
+bit for bit. `:double` is the naive reading and is wrong by ~1.5e-8 relative;
+it is kept only so the two can be compared. See the header.
 
-!!! warning "Second derivatives need the with-`y` NLPModels methods"
-    As for `BA-L*`, `AKIVA`/`HIELOW` and `SARO`, ExaModels 0.12.1 reaches a
-    `ScalarNonlinearOracle`'s Hessian only through `hprod!(m, x, y, v, Hv)` and
-    `hess_coord!(m, x, y, h)`. The no-`y` forms that `NLPModels.hprod(nlp, x,
-    v)` calls for an unconstrained model fall through to the symbolic path and
-    return ZERO. Pass `y = zeros(0)` explicitly.
-
-    Also upstream and also shared: `T = Float32` does not build, because the
-    oracle's work buffers are typed `Vector{Float64}`.
-    [`jimack_pointwise`](@ref) itself is fully generic.
+Unlike the older native oracle models, both NLPModels Hessian entry points
+work here: measured, `hprod(m, x, v)` and `hprod(m, x, Float64[], v)` return
+the same vector to the last bit on this ExaModels (0.12.1 delegates the no-`y`
+forms to the `y`-taking ones with a zero multiplier, which the `BA-L*` and
+`AKIVA`/`HIELOW` docstrings predate). `T = Float32` also builds and evaluates
+`obj`, `grad` and `hprod`; note that ExaModels' scalar-oracle work buffers are
+`Vector{Float64}` regardless, so the Hessian path is computed in Float64 even
+then. [`jimack_pointwise`](@ref) itself is fully generic -- Float32 and
+BigFloat evaluations are part of the verification.
 
 !!! note "Materializing the Hessian is expensive, `hprod` is not"
     `ScalarNonlinearOracle` takes `hvp!`, not an explicit `hess!`, so
@@ -471,6 +501,13 @@ compared. See the header.
     `hvp!` calls here. Explicit sparsity shrinks the stored pattern (and the
     consumer's work) but not that column count. `hprod` is one `hvp!` call and
     is the right way to probe this model.
+
+    Measured per call on shin-compute-001: `obj` 0.13 ms, `grad!` 1.2 ms,
+    `hprod!` 5.1 ms, against CUTEst's 13 ms and 27 ms for `obj` and `grad` --
+    the port is ~20x faster than the Fortran on both, because the Fortran
+    recomputes the shape-function gradients and the whole hand-coded Hessian on
+    every element call. `grad!` and `hprod!` allocate 128 and 224 bytes (the
+    `ntuple` closures' boxes), independent of the problem size.
 """
 function jimack_model(; T = Float64, backend = nothing,
                       fortran_literals::Symbol = :single)

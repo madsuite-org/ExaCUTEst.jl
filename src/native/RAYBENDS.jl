@@ -58,17 +58,23 @@
 #       Q = 0.666666667 - X * X + 0.5 * X**3
 #       C(K) = 1.0D0 + 0.01 * Z(K)
 #
-# 0.166666667, 0.666666667, 0.1666667 and 0.01 are each ~2.8e-8 relative away
-# from their Float32 neighbours (0.5 is exact in both readings). MEASURED
-# against CUTEst at x0 and at a perturbed point: the Float32 reading reproduces
-# `obj` to 1.4e-16 and `grad` to 7.1e-16, the Float64 reading to 1.3e-8 and
-# 2.5e-8 -- eight orders of magnitude, so the data discriminates sharply. The
-# port rounds them through Float32 (`single = true`); `single = false` keeps the
-# other reading available for the record.
+# 0.166666667, 0.666666667, 0.1666667 and 0.01 sit 2.8e-8, 2.9e-8, 8.6e-9 and
+# 2.2e-8 relative from their Float32 neighbours (0.5 is exact in both
+# readings). MEASURED against CUTEst at x0 and at a perturbed point, the data
+# discriminates by eight orders of magnitude:
+#
+#                      obj                     grad
+#   Float32 reading    0.0  (bit-identical)    2.9e-16, 2.2e-16
+#   Float64 reading    7.3e-7, 4.1e-8          9.7e-7,  1.6e-6
+#
+# so the port rounds them through Float32 (`single = true`), and
+# `single = false` keeps the other reading available for the record.
 #
 # Second derivatives ARE supplied here (the `INDIVIDUALS` block has a full `H`
 # section through `HVAL`, and the classification `OXR2-MY-V-0` ends in `2`), so
-# unlike SARO this port's Hessian is checked directly against CUTEst's.
+# unlike SARO this port's Hessian is checked directly against CUTEst's: the
+# FULL sparse Hessian agrees to 6.2e-14 and 1.5e-13 at the two points, over the
+# same 15351 nonzeros CUTEst declares, and `hprod` to 1.3e-14 .. 1.4e-13.
 #
 # ===========================================================================
 # BLEACHNG -- what the Fortran computes
@@ -104,8 +110,9 @@
 # switch). Verified against a 2e6-step RK4 integration at six parameter sets
 # including a = k exactly: 1e-15..1e-13 relative. So the port does not
 # reimplement ODESSA; it replaces it, and the agreement with CUTEst is limited
-# by ODESSA's own 1e-12 tolerance rather than by this code -- measured 2.7e-12
-# on `obj`, which is the honest floor and not a defect of the port.
+# by ODESSA's own 1e-12 tolerance rather than by this code -- measured 4.5e-11
+# and 7.7e-10 on `obj` at the two test points, which is the honest floor here
+# and not a defect of the port.
 #
 # No precision trap in BLEACHNG's value path: `FVAL`, `Fsub` and ODESSA declare
 # everything `DOUBLE PRECISION` and every literal in the value path carries a
@@ -113,20 +120,55 @@
 # so Fortran's implicit rule makes it INTEGER, which is what it is used as.
 # (Tested both readings anyway: there is nothing to round.)
 #
-# THE REFERENCE HAS NO SECOND DERIVATIVES, and not in the zero-Hessian way.
-# The `INDIVIDUALS` block gives `F` and `A`/`G` (via `GVAL`, which runs ODESSA
-# with sensitivity analysis on) but no `H`, while the GROUP type `L2` does
-# supply `H = 2.0`; the classification `SBR1-RN-17-0` ends in `1`. CUTEst
-# therefore returns the Gauss-Newton part only,
+# THE REFERENCE'S GRADIENT W.R.T. QIN IS WRONG, by 39% at x0 and 60% at a
+# perturbed point, and the port does NOT reproduce it. `DF` -- the
+# inhomogeneity dF/dp of ODESSA's sensitivity equations, hand-written in the
+# SIF -- supplies for the QIN column
+#
+#       DFDP( 1 ) = CO3IN / VOLGAS
+#       DFDP( 2 ) = ZERO
+#
+# i.e. it differentiates the gas-phase balance with respect to Qin while
+# holding Qout FIXED, even though `Fsub` two subroutines earlier sets
+# `QOUT = QIN`; the term -y1/Vg is simply missing. (`JAC` is correct and the
+# other four columns of `DF` are correct -- including the two that are
+# identically zero because their parameter enters only through the initial
+# condition, which is what `S01`/`S02` are for. Also worth noting that ODESSA
+# is told NPAR = 5 with PAR = (kLa, QIN, CO3IN, VOLGAS, VOLLIQ) while `DF`'s
+# five branches mean (kLa, CO3g0, CO3l0, QIN, CO3IN); the values are read by
+# position and so are right, only the sensitivity labels are shifted.) With
+# `JAC` correct, the broken column integrates to
+#
+#     S1 = (CO3IN/QIN)(1 - e^{-at}),  S2 = 0
+#
+# and MEASURED: that reconstruction reproduces the reference's gradient to
+# 7.5e-10 and 2.6e-9 on the QIN components, while the true derivative differs
+# from it by 39% / 60%. The other 13 components agree with this port to 1.4e-8
+# and 4.8e-9, which is ODESSA's sensitivity accuracy (the SIF's own note: "the
+# moderate accuracy of the gradient vector"). A central difference of the
+# reference's OBJECTIVE -- which is correct -- decides between the two: it
+# matches THIS PORT to 1.1e-5 / 3.1e-4 (finite-difference limited) and the
+# reference's own gradient only to 0.39 / 0.60. So the port's gradient is the
+# true gradient of the problem CUTEst defines, and the reference's is not.
+#
+# THE REFERENCE ALSO HAS NO SECOND DERIVATIVES, and not in the zero-Hessian
+# way. The `INDIVIDUALS` block gives `F` and `A`/`G` but no `H`, while the
+# GROUP type `L2` does supply `H = 2.0`; the classification `SBR1-RN-17-0` ends
+# in `1`. CUTEst therefore returns the Gauss-Newton part only,
 #
 #     sum 2 grad(alpha) grad(alpha)' ,  the  sum 2 alpha hess(alpha)  term lost,
 #
-# which is nonzero and plausible -- the worst kind of wrong. This port's
-# Hessian is the true one, so it does NOT match, and should not. Checked
-# instead (a) against a central difference of CUTEst's own gradient, which uses
-# only derivatives the SIF supplies, and (b) by reproducing CUTEst's Hessian
-# from this port's Jacobian as 2 J'J, which confirms the diagnosis rather than
-# merely asserting it. See ~/git/scratch/raybends_verify.jl.
+# built from the gradient above. That is nonzero and plausible -- the worst kind
+# of wrong. MEASURED: `2 J'J` assembled from the port's Jacobian WITH the broken
+# QIN column reproduces CUTEst's Hessian to 7.2e-12 and 2.8e-12, which
+# identifies the mechanism exactly; with the true column it is off by 18% / 6%,
+# and the true Hessian is off by 62% / 78%. This port's Hessian is checked
+# instead against a central difference of the reference's own gradient on the
+# 13 rows where that gradient is the true derivative (6.5e-8 .. 2.7e-6,
+# finite-difference limited); the remaining 4x4 QIN-QIN block has no correct
+# reference to check against, so it is checked against a central difference of
+# this port's gradient (7e-10 .. 1.4e-7), which the reference's objective has
+# already validated. See ~/git/scratch/raybends_verify.jl.
 #
 # ===========================================================================
 # Both: why an oracle and not an expression

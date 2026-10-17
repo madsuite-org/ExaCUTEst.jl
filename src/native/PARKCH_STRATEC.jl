@@ -17,7 +17,9 @@
 #
 # The differing line is inside `IF (CHESS)`, i.e. in the hand-coded second
 # derivative recursion, which this port does not use at all. The VALUE loop --
-# lines 55..108 of the stripped source -- is identical in all four files.
+# lines 55..108 of the stripped source -- is identical in all three. (AKIVA is
+# the odd one out of the family: it passes `BETA/LIKE/GR/HESS` as arguments
+# instead of through `COMMON`, so its subroutine was not part of this diff.)
 #
 # So the mathematics is `hielow_loglik` in `src/native/LOGIT.jl`, and this file
 # deliberately REUSES it rather than re-translating it: it is the same Fortran,
@@ -96,15 +98,19 @@
 #   hess     505.25 ms  17.19 ms  29.4    168.68 ms   6.51 ms  25.9
 #   hprod    487.53 ms  17.89 ms  27.3    167.91 ms   6.54 ms  25.7
 #
-# Read honestly: the VALUE is not faster -- the Fortran's value loop is tight
-# and the port is 20-40% behind it. The whole win is in the derivatives, and
-# roughly a quarter of it is better derivatives while the rest is not
-# repeating the sweep. The ratios are consistent with the dead cache above:
-# PARKCH's gradient costs 6.91/15 = 0.46 ms per sweep, 2.2x the 0.21 ms value
-# sweep, which is about what the `CGRAD` branch adds; its Hessian costs
-# 505/120 = 4.2 ms per sweep, 20x the value sweep, which is about what an
-# `I,J` double loop over 120 coefficient pairs adds. Those are the numbers
-# that time the problem out under a solver, so that is where the port helps.
+# Read honestly, because the mechanism matters more than the ratio. The VALUE
+# is not faster: the Fortran's value loop is tight and the port is 20-40%
+# behind it. Nor is the port's AD arithmetic faster than the Fortran's
+# hand-coded recursions -- divide the CUTEst column by the number of sweeps the
+# dead cache forces and ONE Fortran sweep is 6.91/15 = 0.46 ms for a gradient
+# and 505/120 = 4.2 ms for a Hessian, against the port's 0.60 ms and 17.2 ms.
+# (Those per-sweep costs are 2.2x and 20x the 0.21 ms value sweep, which is
+# about what the `CGRAD` branch and the 120-pair `I,J` double loop
+# respectively add -- independent support for the 15-and-120 count.) So the
+# ENTIRE speedup is "evaluate once instead of 15 or 120 times", and a
+# three-line fix to the Fortran's `COMPG`/`COMPH` test would take most of it
+# back. It is nonetheless the real cost CUTEst charges today, and 0.5 s per
+# Hessian is what times these two problems out under a solver.
 #
 # SECOND DERIVATIVES: ONE FULL HESSIAN, CACHED, NOT n HESSIAN-VECTOR PRODUCTS.
 # ExaModels reconstructs a `ScalarNonlinearOracle`'s sparse Hessian by calling
@@ -147,7 +153,10 @@
 #     as documented in LOGIT.jl. Unreachable at any sane iterate: STRATEC's
 #     largest attribute is 225, so it needs `|beta| ~ 3`.
 #
-# Both are measured in the verification script rather than asserted.
+# The first is measured in the verification script rather than asserted. The
+# second is NOT probed here: LOGIT.jl's own verification already exhibits it
+# on HIELOW, the behaviour is a property of `hielow_loglik` and not of these
+# two problems, and no iterate a solver would visit reaches it.
 #
 # MEASURED AGREEMENT (~/git/scratch/parkch_stratec_verify.jl, and its .tsv).
 # Against a real `CUTEstModel`, permuted by SIF variable name, at x0 and at a
@@ -196,9 +205,16 @@ x[idx[a]]`, converted to `b`'s element type.
 
 A free function rather than a closure body on purpose. `T` reaches
 [`parkch_stratec_model`](@ref) as a keyword VALUE, so inside its closures
-`T(...)` is a call on a `DataType` variable and inference gives up; here `T` is
-a real type parameter and the conversion is static. Measured on PARKCH: this
-and [`_hielow_hv!`](@ref) take `hess_coord` from 16.7 ms to 11.9 ms.
+`T(...)` is a call on a `DataType` variable and inference gives up; here `T`
+is a real type parameter and the conversion is static.
+
+Worth being exact about the payoff, which is smaller than the reasoning
+suggests: moving these two loops out of the closures took STRATEC's gradient
+from 1.03 ms to 0.58 ms and PARKCH's `hess_coord` from 16.7 ms to 15.2 ms,
+and the second of those is inside run-to-run noise (+-2 ms). The dispatch was
+removed because dynamic dispatch inside an evaluation callback is a defect
+whatever it costs, not because it was the bottleneck -- the bottleneck is the
+AD sweep itself.
 """
 function _hielow_gather!(b::AbstractVector{T}, x, idx) where {T}
     @inbounds for a in eachindex(b)

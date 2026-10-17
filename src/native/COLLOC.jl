@@ -103,6 +103,14 @@
 #    truncated (-0.030905307000000 against -0.030905307028187). That row has
 #    no external Fortran in it at all; it is the decoder's, not the port's.
 #
+# PRECISION, and one limit that is ExaModels' rather than the port's. `colloc`
+# is generic: evaluated directly it gives the same number in Float64, Float32
+# and BigFloat (Float64 agrees with BigFloat to ~1e-16 relative on every
+# equation index of both problems). Through the oracle, though, ExaModels'
+# `EvalIndexCache` allocates its callback buffers as plain `Float64`, so a
+# `T = BigFloat` model still round-trips every oracle result through double
+# precision. The port is not what caps that.
+#
 # ASSEMBLY, and why it is an `add_eval` and not a `VectorNonlinearOracle`.
 # Neither problem is external all the way through: besides the K rows (one
 # COLLOC element each) there is a linear objective `Q`, the control-magnitude
