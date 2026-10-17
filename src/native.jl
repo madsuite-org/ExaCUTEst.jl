@@ -27,6 +27,10 @@
 include("native/HS68.jl")
 include("native/HS69.jl")
 include("native/BA.jl")
+include("native/VANDANIUM.jl")
+include("native/HS88_92.jl")
+include("native/LOGIT.jl")
+include("native/SARO.jl")
 
 """
     NATIVE_MODELS :: Dict{String,Function}
@@ -41,6 +45,17 @@ const NATIVE_MODELS = Dict{String,Function}(
     (p => (; kwargs...) -> ba_oracle_model(p; kwargs...)
      for p in ("BA-L1", "BA-L1LS", "BA-L16", "BA-L16LS", "BA-L21", "BA-L21LS",
                "BA-L49", "BA-L49LS", "BA-L52", "BA-L52LS", "BA-L73", "BA-L73LS"))...,
+    (p => (; kwargs...) -> vandanium_model(p; kwargs...)
+     for p in ("VANDANIUMS", "VANDANMSLS"))...,
+    "HS88" => hs88_model,
+    "HS89" => hs89_model,
+    "HS90" => hs90_model,
+    "HS91" => hs91_model,
+    "HS92" => hs92_model,
+    "AKIVA" => akiva_model,
+    "HIELOW" => hielow_model,
+    "SARO" => saro_model,
+    "SAROMM" => saromm_model,
 )
 
 """
