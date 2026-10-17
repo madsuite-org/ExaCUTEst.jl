@@ -95,6 +95,12 @@
 # stage.) `@noinline` is a code-size decision only: the function is still
 # allocation-free and still callable from a GPU kernel.
 #
+# A GV100 reaches the same conclusion from the other direction: in a kernel
+# carrying a single-partial level over an 11-partial level, forcing the eight
+# copies inline takes compilation from 7.0 s to 34.0 s and leaves 79000 bytes
+# of spill per thread against 86440. `src/native/SARO_gpu.jl` records the
+# measurement and the thread shapes it chose instead.
+#
 # LITERALS ARE KEPT AS WRITTEN. Constants such as 1161.11111111111,
 # 69666.6666666667, 0.000277777777777778 and 9.41985645933014e-06 are
 # truncated decimals of 10450/9, 627000/9, 1/3600 and 1/106158.9...; replacing
@@ -501,6 +507,11 @@ Needs no Fortran toolchain and no `sifdecoder`: the structure comes from
 `sif_decode(...; external = :defer)` and the driving data from the
 `BLOCK DATA SARCOM` appended to the same file.
 
+For a model that takes a `backend` see [`saro_kernel_model`](@ref), which
+drives the same [`saro_stage_values`](@ref) from KernelAbstractions kernels and
+declares the same Jacobian and Hessian patterns; its `cons`, `jac` and `hess`
+are bit-identical to this builder's in Float64 and in BigFloat.
+
 `T != Float64` builds, and `cons` evaluates (agreeing with the Float64 model
 to 5e-6 in Float32, and finite in every precision), but in Float32 `jac` and
 `hess` do not.
@@ -529,6 +540,9 @@ BigFloat whenever the data and the values share a type.
 function saro_oracle_model(name::AbstractString; T = Float64, backend = nothing)
     # Refuse a backend rather than accept and ignore it: that would report the
     # model as living on the device when its callbacks run on the host.
+    # `saro_kernel_model` (src/native/SARO_gpu.jl) is the builder that takes
+    # one; it calls the same `saro_stage_values` from KernelAbstractions
+    # kernels and agrees with this builder bit for bit on cons, jac and hess.
     backend === nothing || error(
         "saro_oracle_model does not take a backend: the port's callbacks run " *
         "on the CPU. saro_stage_values is GPU-safe, so a device path is a " *

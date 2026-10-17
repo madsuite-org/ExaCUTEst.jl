@@ -557,6 +557,43 @@ function _rb_hess_pattern(blocks, k::Int)
     return rows, cols
 end
 
+"""
+    _raybends_decode() -> (P, els)
+
+Decode RAYBENDS, check that it has the shape every builder here assumes, and
+read out one [`RaybendsElem`](@ref) per spline segment.
+"""
+function _raybends_decode()
+    P = ExaModelsSIF.sif_decode(sif_problem_path("RAYBENDS"); external = :defer)
+    for (tname, fn) in P.external_types
+        (tname == "TT" && fn === :FVAL) ||
+            error("RAYBENDS: expected deferred TT calling FVAL, found $tname => $fn")
+    end
+    all(==(1.0), P.varscale) || error("RAYBENDS: variable scaling is not supported here")
+    els = raybends_elements(P)
+    isempty(els) && error("RAYBENDS: no TT elements found")
+    return P, els
+end
+
+"""
+    _bleachng_decode(::Type{S}) -> (P, obs, lins)
+
+Decode BLEACHNG, check that it has the shape every builder here assumes, and
+split its groups into the observations that hold an `A` element and the purely
+linear ones.
+"""
+function _bleachng_decode(::Type{S}) where {S}
+    P = ExaModelsSIF.sif_decode(sif_problem_path("BLEACHNG"); external = :defer)
+    for (tname, fn) in P.external_types
+        (tname == "A" && fn === :FVAL) ||
+            error("BLEACHNG: expected deferred A calling FVAL, found $tname => $fn")
+    end
+    all(==(1.0), P.varscale) || error("BLEACHNG: variable scaling is not supported here")
+    obs, lins = bleachng_groups(P, S)
+    isempty(obs) && error("BLEACHNG: no A elements found")
+    return P, obs, lins
+end
+
 function _rb_backend_check(fname::AbstractString, backend)
     backend === nothing || error(
         "$fname does not take a backend: the port's callbacks run on the " *
@@ -584,23 +621,18 @@ Float32 reading to a Float64 one; it is wrong against CUTEst by 7.3e-7 on
 Needs no Fortran toolchain and no `sifdecoder`: the structure comes from
 `sif_decode(...; external = :defer)`.
 
-`T` other than `Float64` does not build today, and that is upstream rather
-than here -- `ExaModels`' oracle work buffers are allocated as `zeros(n)`,
-i.e. `Vector{Float64}`, while the field is typed `VT`. The port itself is
-element-type generic: [`raybends_time`](@ref) evaluates in Float32 and
-BigFloat.
+`T` may be `Float32` or `BigFloat` as well as `Float64`: the callbacks are
+generic in the element type and ExaModels allocates the oracle's work buffers
+at it, so a non-Float64 model carries its own precision rather than
+round-tripping through double. `hess_coord` at `BigFloat` is the one callback
+to avoid here -- this oracle has no explicit `hess!`, so ExaModels
+reconstructs the Hessian with one `hvp!` per variable, 2050 passes over all
+1026 segments under nested `BigFloat` duals. `raybends_kernel_model` supplies
+an explicit `hess!` and has no such cost.
 """
 function raybends_model(; T = Float64, backend = nothing, single::Bool = true)
     _rb_backend_check("raybends_model", backend)
-    P = ExaModelsSIF.sif_decode(sif_problem_path("RAYBENDS"); external = :defer)
-    for (tname, fn) in P.external_types
-        (tname == "TT" && fn === :FVAL) ||
-            error("RAYBENDS: expected deferred TT calling FVAL, found $tname => $fn")
-    end
-    all(==(1.0), P.varscale) || error("RAYBENDS: variable scaling is not supported here")
-
-    els = raybends_elements(P)
-    isempty(els) && error("RAYBENDS: no TT elements found")
+    P, els = _raybends_decode()
     tab = raybends_table(T; single)
     n = length(P.varnames)
     hr, hc = _rb_hess_pattern((e.idx for e in els), 8)
@@ -662,20 +694,13 @@ ForwardDiff, so the SIF's `GVAL` (ODESSA's sensitivity equations) is not used
 -- and this port's Hessian is the true one where CUTEst's is Gauss-Newton; see
 the header.
 
-Variables are in SIF declaration order. `T` other than `Float64` does not
-build today, for the upstream reason given in [`raybends_model`](@ref).
+Variables are in SIF declaration order. `T` may be `Float32` or `BigFloat` as
+well as `Float64`, as in [`raybends_model`](@ref); with 17 variables the
+Hessian reconstruction that costs RAYBENDS dearly is cheap here.
 """
 function bleachng_model(; T = Float64, backend = nothing)
     _rb_backend_check("bleachng_model", backend)
-    P = ExaModelsSIF.sif_decode(sif_problem_path("BLEACHNG"); external = :defer)
-    for (tname, fn) in P.external_types
-        (tname == "A" && fn === :FVAL) ||
-            error("BLEACHNG: expected deferred A calling FVAL, found $tname => $fn")
-    end
-    all(==(1.0), P.varscale) || error("BLEACHNG: variable scaling is not supported here")
-
-    obs, lins = bleachng_groups(P, T)
-    isempty(obs) && error("BLEACHNG: no A elements found")
+    P, obs, lins = _bleachng_decode(T)
     n = length(P.varnames)
     hr, hc = _rb_hess_pattern((o.idx for o in obs), 5)
 

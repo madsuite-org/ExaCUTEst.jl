@@ -186,16 +186,11 @@
 # is 5.5e-12 ABSOLUTE from the exact value and the Fortran is 4.4e-11, so the
 # port is the closer of the two.
 #
-# NOT REGISTERED IN `NATIVE_MODELS`. `src/native.jl` is out of scope for the
-# task that produced this file, so nothing `include`s it and
-# `ExaCUTEstModel("PARKCH")` still goes to the oracle tier. To use it:
-#
-#     @eval ExaCUTEst include(".../src/native/PARKCH_STRATEC.jl")
-#
-# which is also how the verification script loads it. Registering it is two
-# lines in `src/native.jl` (`include` + two `NATIVE_MODELS` entries) plus the
-# usual entry in test/runtests.jl's "native models" set. It needs LOGIT.jl to
-# be loaded first, for `hielow_parse` / `hielow_loglik` / `hielow_data`.
+# A GPU BACKEND GOES THROUGH `logit_kernel_model` (src/native/LOGIT_gpu.jl),
+# which evaluates the same log-likelihood in KernelAbstractions kernels over
+# records and serves all four HieLoW problems. The callbacks here are host
+# loops, and the Hessian cache below is a mutable host array, so they refuse a
+# backend.
 
 """
     _hielow_gather!(b, x, idx) -> b
@@ -270,19 +265,16 @@ port's arithmetic deliberately differs from the Fortran's.
 
 `T = Float32` builds and evaluates (`obj(x0) = 2150.1487` for PARKCH against
 the Float64 `2150.126124609186`, i.e. the accuracy a 1386-term
-single-precision sum can deliver). Note that the `T = Float32` warning in
-`logit_oracle_model`'s docstring is now STALE -- `logit_oracle_model("HIELOW";
-T = Float32)` and `("AKIVA"; T = Float32)` both build and evaluate on this
-ExaModels, measured 2026-10-16. The value function is generic in any case and
-is also checked in `BigFloat` by the verification script.
+single-precision sum can deliver), and so does `T = BigFloat`, which is what
+arbitrates a Float64 result.
 """
 function parkch_stratec_model(name::AbstractString; T = Float64, backend = nothing)
-    # The oracle's callbacks are CPU Julia. hielow_loglik is type-generic and
-    # could be called from a kernel, but the Hessian cache below is a mutable
-    # host array, so claiming a backend would misreport where the model runs.
+    # The Hessian cache below is a mutable host array and `hielow_loglik`
+    # indexes its scratch at a runtime node number, so these callbacks run on
+    # the CPU; claiming a backend would misreport where the model runs.
     backend === nothing || error(
-        "parkch_stratec_model does not take a backend yet: the port's " *
-        "callbacks run on the CPU.")
+        "parkch_stratec_model's callbacks are host loops over hielow_loglik " *
+        "and run on the CPU; use logit_kernel_model for a backend")
     name in ("PARKCH", "STRATEC") ||
         error("parkch_stratec_model handles PARKCH and STRATEC, not $name")
 

@@ -334,30 +334,20 @@ Needs no `sifdecoder` and no Fortran toolchain: the variables and bounds come
 from `sif_decode(...; external = :defer)` and the sample from
 [`hielow_parse`](@ref).
 
-!!! warning "Second derivatives need the with-`y` NLPModels methods"
-    ExaModels 0.12.1 adds a `ScalarNonlinearOracle`'s Hessian only in
-    `hprod!(m, x, y, v, Hv)` and `hess_coord!(m, x, y, h)`. The no-`y`
-    methods, which is what `NLPModels.hess(nlp, x)` and
-    `NLPModels.hprod(nlp, x, v)` call for an UNCONSTRAINED model, fall
-    through to the symbolic-only path and return ZERO here. Pass
-    `y = zeros(0)` explicitly. This is upstream and pre-existing -- the
-    `BA-L*LS` native models behave the same way -- not a gap in this port;
-    `test/../logit_verify.jl` measures both paths.
+`T` may be `Float64`, `Float32` or `BigFloat`: [`hielow_loglik`](@ref) is
+generic in the coefficient type and the oracle's work buffers take the model's.
 
-    Also upstream, and also shared with `BA-L*`: `T = Float32` does not build,
-    because ExaModels' oracle work buffers are typed `Vector{Float64}`.
-    [`hielow_loglik`](@ref) itself is fully generic -- `Float32` and
-    `BigFloat` evaluations are part of the verification -- so this is the
-    plumbing, not the port.
+Refuses a `backend`. For a model whose objective callbacks run on a device, see
+[`logit_kernel_model`](@ref), which evaluates the same log-likelihood in
+KernelAbstractions kernels over the estimation sample.
 """
 function logit_oracle_model(name::AbstractString; T = Float64, backend = nothing)
-    # The oracle's callbacks are CPU Julia. hielow_loglik is type-generic, so
-    # a device path is roadmap step 4 rather than a rewrite -- but accepting a
-    # backend here would misreport where the model runs.
+    # `hielow_loglik` indexes two scratch vectors at a runtime node number, so
+    # these callbacks are host loops; accepting a backend would misreport where
+    # the model runs. `logit_kernel_model` is the device path.
     backend === nothing || error(
-        "logit_oracle_model does not take a backend yet: the port's callbacks " *
-        "run on the CPU. Accepting one would misreport the model as being on " *
-        "the device.")
+        "logit_oracle_model's callbacks are host loops over hielow_loglik and " *
+        "run on the CPU; use logit_kernel_model for a backend")
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer)
     haskey(P.external_types, "LIKE") ||
         error("$name: expected a deferred LIKE element type, found " *

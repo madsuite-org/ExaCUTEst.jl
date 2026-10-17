@@ -81,10 +81,25 @@ precisions) to make sure we have correct impl -> done!"
    `VANDANIUM*`), which are ordinary SIMD ExaModels. Each has a
    `test/*_gpu_verify.jl` beside it.
 
-   Eight refuse a backend: `CAR2`, `ORBIT2`, `RAYBENDS`, `BLEACHNG`, `AKIVA`,
-   `HIELOW`, `PARKCH`, `STRATEC`. `SARO`/`SAROMM` are out of scope (Sungho
-   2026-10-17) -- each stage is ~500 operations under twice-nested 11-partial
-   duals, which already forced `@noinline` on the host.
+   **All 34 now have a GPU path.** Every one has a `test/*_gpu_verify.jl`
+   beside it running three comparisons: the device against the same kernels on
+   KernelAbstractions' `CPU()` backend (which isolates the device rather than
+   comparing two algorithms), the host kernels against the Fortran-verified
+   host port (the chain to the reference), and the assembled `hess_coord`
+   against `hprod` (the only reading that touches the coordinate path -- it
+   caught a 92%-wrong Hessian on BA and a 96%-wrong one on RAYBENDS, both
+   while `hprod` read exact).
+
+   SARO and SAROMM are the instructive case, because the obvious shape is
+   excluded by arithmetic rather than by taste. A plain nested-dual Hessian
+   needs 508 KB of local memory per thread against the 512 KB a thread may
+   have on CC 7.0; the per-column shape fits and spills 86 KB; one thread per
+   (stage, lower-triangle PAIR) costs six times the arithmetic and runs seven
+   times faster, because at this depth spill traffic dominates. Registers pin
+   at 255 in every shape, so **spill bytes, not register count, is the number
+   that discriminates**. Forcing the RK4 copies inline made both compile time
+   and spill worse on the device, agreeing with the host measurement that put
+   `@noinline` there.
 
    WHETHER A PORT NEEDS AN ELEMENT-TYPE GATE DEPENDS ON ONE THING: whether any
    of its kernels uses `KernelAbstractions.@atomic`, which has no

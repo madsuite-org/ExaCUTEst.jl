@@ -134,7 +134,9 @@ end
             "AKIVA"; external = :error)
         @test_throws ErrorException ExaCUTEstModel("AKIVA"; backend = :fake)
         @test_throws ErrorException ExaCUTEstModel("ROSENBR"; external = :nonsense)
-        @test_throws ErrorException ExaCUTEstModel("AKIVA"; T = Float32)
+        # AKIVA builds at any element type: its port is generic and the
+        # oracle cache buffers carry the model's type.
+        @test eltype(ExaCUTEstModel("AKIVA"; T = Float32).meta.x0) === Float32
 
         # the same problem twice used to fail with CUTEstException("memory
         # allocation error"): the Fortran decoder allows one live model per
@@ -149,10 +151,15 @@ end
     @testset "native models" begin
         nat = native_problems()
         orc = oracle_tier_problems()
-        @test nat == ["HS68", "HS69"]
+        # A PROPERTY, not a snapshot of today's registry. The earlier form
+        # named the two problems that happened to be native and the count that
+        # happened to be on the oracle tier, so it failed as soon as a port
+        # landed -- an assertion whose subject is the state of the project is a
+        # countdown, and what it counted down to was us doing the work.
         @test isempty(intersect(nat, orc))
         @test sort(vcat(nat, orc)) == sort(external_fortran_problems())
-        @test length(orc) == 32
+        @test isempty(orc)                 # every external-Fortran port exists
+        @test sort(nat) == sort(external_fortran_problems())
         # A native model must NOT get the oracle tier's backend refusal --
         # preferring the native model is the whole point. Asserted on the
         # MESSAGE, not on an exception type: what a nonsense backend throws

@@ -364,45 +364,23 @@ function _colloc_conbounds(g, ::Type{T}) where {T}
 end
 
 """
-    colloc_model(name, sysfor, Val(NX), Val(NU); T, backend,
-                 element_hessian, ref_param_rounding, kwargs...) -> ExaModel
+    _colloc_decode(name, sysfor, Val(NX), Val(NU); T, ref_param_rounding,
+                   kwargs...) -> NamedTuple
 
-Build a `COLLOC`-family problem: the non-external part (linear objective,
-SQR/PROD elements, linear terms, constants, group scales) as ordinary
-ExaModels SIMD expressions in SIF declaration order, and the `Ktyp` elements
-as one `ExaModels.add_eval` oracle over `colloc`.
+Decode a `COLLOC`-family problem and sort its pieces into the buckets both
+builders assemble from: the constraint bounds, the linear terms, constants,
+SQR and PROD elements and objective terms of the non-external part, one
+[`CollocElem`](@ref) per `Ktyp` element, and the FSYS `sysfor` returns for the
+`COEFRI` parameters found.
 
-`sysfor` receives the `COEFRI` element parameters found in the decode (empty
-if the element type has none) and returns the FSYS to use, so a problem whose
-right-hand side carries a SIF `\$-PARAMETER` reads it from the data instead of
-hardcoding it.
-
-`element_hessian = true`, the default, gives the TRUE Hessian by AD over the
-ported value. It is the mathematically right one and it does NOT match the
-reference, which has no COLLOC second derivatives at all.
-`element_hessian = false` drops them to match -- what the SIF declares and
-what SIFdecode, and so CUTEst, evaluates. See the header, note 1.
-
-`ref_param_rounding = true` rounds the interval endpoints TN/TN1 to the 11
-significant digits the reference's copies carry, which makes every row value
-agree with the compiled Fortran bit for bit. The default `false` uses the
-SIF's exact values; see the header for the measurement.
-
-Refuses anything in the decode it is not prepared to reproduce exactly -- a
-group type, an unexpected element type, an objective element, internal
-variables, a QUADRATIC section, a variable scale -- rather than quietly
-dropping it.
+Refuses anything it is not prepared to reproduce exactly -- a group type, an
+unexpected element type, an objective element, internal variables, a QUADRATIC
+section, a variable scale -- rather than quietly dropping it. `kwargs` go to
+`ExaModelsSIF.sif_decode`, so a `-param` variant reaches the decode.
 """
-function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
-                      T = Float64, backend = nothing, element_hessian::Bool = true,
-                      ref_param_rounding::Bool = false,
-                      kwargs...) where {NX,NU}
-    # The oracle's callbacks run on the CPU, so a backend is refused rather
-    # than ignored: accepting one would misreport the model as living on the
-    # device. `colloc` itself is allocation- and branch-free and so GPU-safe.
-    backend === nothing || error(
-        "$name: colloc_model does not take a backend -- the COLLOC oracle's " *
-        "callbacks run on the CPU. `colloc` itself is GPU-safe.")
+function _colloc_decode(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
+                        T = Float64, ref_param_rounding::Bool = false,
+                        kwargs...) where {NX,NU}
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer, kwargs...)
     tname = "Ktyp"
     haskey(P.external_types, tname) ||
@@ -508,7 +486,23 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
               "($(minimum(coefri)) .. $(maximum(coefri))); colloc_model " *
               "assumes one FSYS per problem")
     sys = sysfor(coefri)
+    return (; P, nvar, ncon, lcon, ucon, clin, ccst, csqr, cprd, olin,
+            objconst, elems, sys, nv)
+end
 
+"""
+    _colloc_simd_core(T, backend, D) -> (core, x, con)
+
+The non-external part of a decoded COLLOC-family problem as ordinary ExaModels
+SIMD expressions: the linear objective, the group constants, the linear
+constraint terms and the SQR/PROD elements, in SIF declaration order.
+
+The constraint rows are declared by [`ExaModels.add_con`](@ref) before any of
+them is filled, so row `i` is the `i`-th constraint group of the decode and a
+later `add_eval` can fill rows that already exist.
+"""
+function _colloc_simd_core(::Type{T}, backend, D) where {T}
+    (; P, nvar, ncon, lcon, ucon, clin, ccst, csqr, cprd, olin, objconst) = D
     # --- the SIMD part, filling rows by their SIF index
     c = ExaModels.ExaCore(T; backend)
     c, x = ExaModels.add_var(c, nvar; start = P.x0, lvar = P.lvar, uvar = P.uvar)
@@ -528,6 +522,54 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
         ((c, _) = ExaModels.add_obj(c, Base.Generator(d -> d.a * x[d.j], olin)))
     iszero(objconst) ||
         ((c, _) = ExaModels.add_obj(c, Base.Generator(d -> d.k, [(k = objconst,)])))
+    return c, x, con
+end
+
+"""
+    colloc_model(name, sysfor, Val(NX), Val(NU); T, backend,
+                 element_hessian, ref_param_rounding, kwargs...) -> ExaModel
+
+Build a `COLLOC`-family problem: the non-external part (linear objective,
+SQR/PROD elements, linear terms, constants, group scales) as ordinary
+ExaModels SIMD expressions in SIF declaration order, and the `Ktyp` elements
+as one `ExaModels.add_eval` oracle over `colloc`.
+
+`sysfor` receives the `COEFRI` element parameters found in the decode (empty
+if the element type has none) and returns the FSYS to use, so a problem whose
+right-hand side carries a SIF `\$-PARAMETER` reads it from the data instead of
+hardcoding it.
+
+`element_hessian = true`, the default, gives the TRUE Hessian by AD over the
+ported value. It is the mathematically right one and it does NOT match the
+reference, which has no COLLOC second derivatives at all.
+`element_hessian = false` drops them to match -- what the SIF declares and
+what SIFdecode, and so CUTEst, evaluates. See the header, note 1.
+
+`ref_param_rounding = true` rounds the interval endpoints TN/TN1 to the 11
+significant digits the reference's copies carry, which makes every row value
+agree with the compiled Fortran bit for bit. The default `false` uses the
+SIF's exact values; see the header for the measurement.
+
+Refuses anything in the decode it is not prepared to reproduce exactly -- a
+group type, an unexpected element type, an objective element, internal
+variables, a QUADRATIC section, a variable scale -- rather than quietly
+dropping it.
+"""
+function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
+                      T = Float64, backend = nothing, element_hessian::Bool = true,
+                      ref_param_rounding::Bool = false,
+                      kwargs...) where {NX,NU}
+    # The oracle's callbacks run on the CPU, so a backend is refused rather
+    # than ignored: accepting one would misreport the model as living on the
+    # device. `colloc` itself is allocation- and branch-free and so GPU-safe.
+    backend === nothing || error(
+        "$name: colloc_model does not take a backend -- the COLLOC oracle's " *
+        "callbacks run on the CPU. `colloc` itself is GPU-safe.")
+    D = _colloc_decode(name, sysfor, Val(NX), Val(NU); T, ref_param_rounding,
+                       kwargs...)
+    (; elems, nv) = D
+    sys = D.sys
+    c, x, con = _colloc_simd_core(T, backend, D)
 
     # --- the external part, as an oracle over `colloc`
     nel = length(elems)
