@@ -233,8 +233,16 @@ function verify(name; ndir = 3, seed = 20261016)
             rvn, rcn = refnames(ref)
             ref.meta.nvar == nv || error("nvar $(ref.meta.nvar) vs $nv")
             ref.meta.ncon == nc || error("ncon $(ref.meta.ncon) vs $nc")
-            pv = Int[something(findfirst(==(s), ovn)) for s in rvn]
-            pc = nc > 0 ? Int[something(findfirst(==(s), ocn)) for s in rcn] : Int[]
+            # By Dict rather than `findfirst`: a linear scan per name is
+            # quadratic in the name count, which for BA-L52's 694346 rows is
+            # 4.8e11 string comparisons and turned a minutes-long comparison
+            # into hours.
+            ivn = Dict(s => j for (j, s) in enumerate(ovn))
+            length(ivn) == length(ovn) || error("duplicate variable names")
+            pv = Int[ivn[s] for s in rvn]
+            icn = Dict(s => i for (i, s) in enumerate(ocn))
+            nc == 0 || length(icn) == length(ocn) || error("duplicate row names")
+            pc = nc > 0 ? Int[icn[s] for s in rcn] : Int[]
             length(unique(pv)) == nv || error("variable name map is not a permutation")
 
             toref(v) = v[pv]                       # our vector -> ref order
