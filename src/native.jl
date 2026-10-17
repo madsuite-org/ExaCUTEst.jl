@@ -26,6 +26,8 @@
 
 include("native/HS68_69.jl")
 include("native/BA.jl")
+# after BA.jl: the kernel path reuses ba_observations/ba_residual from it
+include("native/BA_gpu.jl")
 include("native/VANDANIUM.jl")
 include("native/HS88_92.jl")
 include("native/LOGIT.jl")
@@ -41,6 +43,31 @@ include("native/JIMACK.jl")
 include("native/COLLOC.jl")
 include("native/RAYBENDS.jl")
 
+# The BA-L* family has two builders and the element type picks between them.
+#
+# `ba_kernel_model` is the one to want: KernelAbstractions kernels over the
+# same `ba_residual`, so it serves a device as well as the host and a
+# CPU-versus-GPU comparison tests the device rather than two unrelated
+# implementations. It is also faster on the host at every size and callback
+# measured, single-threaded -- 9.6x on BA-L1's `cons`, 22.2x on BA-L52's,
+# 9.4x on BA-L52's `hess_coord`.
+#
+# It cannot do a non-bits element type. The objective gradient and both
+# Hessian-vector products scatter-accumulate with `KernelAbstractions.@atomic`,
+# which has no implementation for one: `T = BigFloat` raises
+# `ArgumentError: unsupported atomic type BigFloat` even with
+# `backend = nothing`, since the kernels run through KA's CPU backend either
+# way. BigFloat is how a Float64 result gets arbitrated, so routing everything
+# through the kernels would cost the instrument rather than a feature.
+# `ba_oracle_model`'s plain host loops need no atomics and serve that case;
+# they are also what was verified against the Fortran directly.
+#
+# `isbitstype` is necessary rather than sufficient -- a bits type KA happens
+# to have no atomic for raises the same error, which names the type.
+_ba_model(p::AbstractString; T = Float64, kwargs...) =
+    isbitstype(T) ? ba_kernel_model(p; T, kwargs...) :
+                    ba_oracle_model(p; T, kwargs...)
+
 """
     NATIVE_MODELS :: Dict{String,Function}
 
@@ -51,7 +78,7 @@ oracle tier, so they accept a `backend` and run on a GPU.
 const NATIVE_MODELS = Dict{String,Function}(
     "HS68" => hs68_model,
     "HS69" => hs69_model,
-    (p => (; kwargs...) -> ba_oracle_model(p; kwargs...)
+    (p => (; kwargs...) -> _ba_model(p; kwargs...)
      for p in ("BA-L1", "BA-L1LS", "BA-L16", "BA-L16LS", "BA-L21", "BA-L21LS",
                "BA-L49", "BA-L49LS", "BA-L52", "BA-L52LS", "BA-L73", "BA-L73LS"))...,
     (p => (; kwargs...) -> vandanium_model(p; kwargs...)

@@ -49,6 +49,15 @@ const BIG = 50_000
 # `hess_coord` is one call and the check is affordable at any size.
 const BIG_SCALAR_HESS = 2_000
 
+# Objective-only problems whose port DOES supply an explicit `hess!`, so
+# `hess_coord` costs one call and `BIG_SCALAR_HESS` does not apply. `BIG`
+# still does: it bounds the size of the two sparse matrices the comparison
+# materializes, which is a separate question from how they are computed.
+# These are the problems the duplicate-coordinate defect lived in, so they are
+# the ones where coordinate-path coverage is worth the most.
+const EXPLICIT_HESS = Set(["BA-L1LS", "BA-L16LS", "BA-L21LS", "BA-L49LS",
+                           "BA-L52LS", "BA-L73LS"])
+
 # --- where the reference is not the standard ---------------------------------
 
 # First derivatives -- gradient AND Jacobian together, because both are built
@@ -323,7 +332,8 @@ function verify(name; ndir = 3, seed = 20261016)
                 # Assembled Hessian: exercises hess_structure/hess_coord, which
                 # hprod does not touch, and so is where a mis-declared sparsity
                 # pattern or a non-accumulating write shows up.
-                if nv <= BIG && (nc > 0 || nv <= BIG_SCALAR_HESS)
+                if nv <= BIG &&
+                   (nc > 0 || nv <= BIG_SCALAR_HESS || name in EXPLICIT_HESS)
                     Ho = hsparse(ours, xo, yo)
                     # `hess_coord!` fills one slot per declared nonzero. Where
                     # the declared pattern repeats a (row, col) pair -- element
