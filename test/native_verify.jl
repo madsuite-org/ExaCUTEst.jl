@@ -103,6 +103,15 @@ constant-coefficient ODE in closed form"),
     ("SARO", "jac") => (1e-14, "365 stages of RK4 summed in a different \
 order than the Fortran's"),
     ("SAROMM", "jac") => (1e-14, "as SARO"),
+    ("VANDANIUMS", "cons") => (1e-10, "SIFdecode writes OUTSDIF.d at 11 \
+significant digits and `cons` at x0 is the group constants alone, so the \
+whole gap is their truncation: worst row F7, 9 of 10 rows not bit-exact, and \
+the residual is exactly |dconstant(F7)|/2. Rounding the decode's constants, \
+weights and H to 11 digits makes every row and all 220 Jacobian entries \
+bit-exact, while 9, 10, 12, 13 and 14 digits all fail"),
+    ("VANDANIUMS", "jac") => (5e-11, "as cons, split between the element \
+weights 1/E (9.18e-12) and the parameter H = 5.5/19 (1.94e-12)"),
+    ("VANDANMSLS", "grad") => (5e-11, "as VANDANIUMS jac"),
     ("RAYBENDS", "hprod") => (1e-12, "1026 spline segments summed in a \
 different order"),
     ("RAYBENDS", "hess") => (1e-12, "as hprod"),
