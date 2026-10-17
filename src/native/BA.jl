@@ -189,23 +189,22 @@ function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
     c = ExaModels.ExaCore(T)
     c, x = ExaModels.add_var(c, n; start = P.x0, lvar = P.lvar, uvar = P.uvar)
 
-    # Hessian sparsity: the lower triangle of each observation's 12x12 block.
-    # Observations that share a camera or a point repeat a (row, col) pair, and
-    # the two oracle kinds want opposite things from that repetition, so the
-    # pattern is built in two forms.
+    # Hessian sparsity: the lower triangle of each observation's 12x12 block,
+    # in the slot order both `hess!` closures below write. Observations that
+    # share a camera or a point repeat a (row, col) pair, and that repetition
+    # is how an entry accumulates the contribution of every observation
+    # touching it, since each `hess!` writes one value per declared entry and
+    # the consumer sums duplicates. Deduplicating would drop all but one.
     #
-    #   The VECTOR oracle's `hess!` is called once and writes one value per
-    #   declared entry -- `y[i] * H[a,b]` for its own observation -- so the
-    #   repetition is how an entry accumulates the contributions of every
-    #   observation that touches it. Deduplicating it would drop all but one.
-    #
-    #   The SCALAR oracle has no `hess!`: ExaModels fills its declared pattern
-    #   from `hvp!`, one product per column, so every slot carrying the same
-    #   (row, col) receives the SAME already-complete second derivative. Those
-    #   repeats then sum on assembly and multiply the entry by its multiplicity
-    #   -- measured as a 92% error on BA-L1LS's assembled Hessian against the
-    #   reference, while `hprod` is exact, because `hprod` never reads the
-    #   coordinate path. So the scalar oracle must declare each entry once.
+    # BOTH oracle kinds get an explicit `hess!` for this reason. Without one
+    # the scalar oracle's pattern is instead filled from `hvp!`, one product
+    # per column, so every slot carrying the same (row, col) receives the SAME
+    # already-complete second derivative and the repeats multiply the entry by
+    # its multiplicity: measured as a 92% error on BA-L1LS's assembled Hessian
+    # against the reference while `hprod` was exact, because `hprod` never
+    # reads the coordinate path. It also keeps this pattern identical to
+    # `ba_kernel_model`'s, so the two builders are element-wise comparable --
+    # which matters because the element type routes between them.
     hr = Vector{Int}(undef, 78 * nobs)
     hc = Vector{Int}(undef, 78 * nobs)
     let p = 0
@@ -214,12 +213,6 @@ function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
             i, j = o.idx[a], o.idx[b]
             hr[p], hc[p] = max(i, j), min(i, j)
         end
-    end
-    if isobj
-        seen = Set{Tuple{Int,Int}}()
-        keep = [((i, j) in seen ? false : (push!(seen, (i, j)); true))
-                for (i, j) in zip(hr, hc)]
-        hr, hc = hr[keep], hc[keep]
     end
 
     if isobj
@@ -264,8 +257,22 @@ function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
             end
             Hv
         end
+        # 2 (grad_i grad_i' + r_i H_i) for each observation, lower triangle,
+        # in declared slot order.
+        hess! = (vals, xv) -> begin
+            p = 0
+            for o in obs
+                r = ba_row(xv, o; rodrigues)
+                gr = ba_row_grad(xv, o; rodrigues)
+                H = ba_row_hess(xv, o; rodrigues)
+                for a in 1:12, b in 1:a
+                    vals[p += 1] = 2 * (gr[a] * gr[b] + r * H[a, b])
+                end
+            end
+            vals
+        end
         sor = ExaModels.ScalarNonlinearOracle(;
-            nvar = n, f = f, grad! = grad!, hvp! = hvp!,
+            nvar = n, f = f, grad! = grad!, hvp! = hvp!, hess! = hess!,
             hess_rows = hr, hess_cols = hc, adapt = Val(true))
         c = ExaModels.objective(c, sor)
     else
