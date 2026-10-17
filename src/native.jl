@@ -24,8 +24,7 @@
 # silently. The legacy 0.1 port contained three candidates and only two
 # survived that check.
 
-include("native/HS68.jl")
-include("native/HS69.jl")
+include("native/HS68_69.jl")
 include("native/BA.jl")
 include("native/VANDANIUM.jl")
 include("native/HS88_92.jl")
@@ -36,6 +35,11 @@ include("native/HS67_85.jl")
 # SIFs append the SAME SUBROUTINE HIELOW (204 lines byte-identical once
 # comments and DATA are stripped)
 include("native/PARKCH_STRATEC.jl")
+include("native/JIMACK.jl")
+# CAR2/ORBIT2 share one file: their SIFs append the SAME `COLLOC` driver, and
+# only the FSYS right-hand side differs (see the header there)
+include("native/COLLOC.jl")
+include("native/RAYBENDS.jl")
 
 """
     NATIVE_MODELS :: Dict{String,Function}
@@ -65,6 +69,11 @@ const NATIVE_MODELS = Dict{String,Function}(
     "HS85" => hs85_model,
     "PARKCH" => parkch_model,
     "STRATEC" => stratec_model,
+    "JIMACK" => jimack_model,
+    "CAR2" => car2_model,
+    "ORBIT2" => orbit2_model,
+    "RAYBENDS" => raybends_model,
+    "BLEACHNG" => bleachng_model,
 )
 
 """

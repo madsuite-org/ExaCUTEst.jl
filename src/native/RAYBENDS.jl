@@ -104,21 +104,32 @@
 #             phi(u) = expm1(u)/u, phi(0) = 1
 #
 # (a - k vanishes at Qin/Vg = kLa, which is inside the box, hence `phi` rather
-# than the algebraically equal (e^{-kt} - e^{-at})/(a-k); the port evaluates
-# `phi` by its Taylor series for |u| < 1e-8 and by `expm1(u)/u` otherwise, and
-# both the first and second derivatives of the two forms agree to ~1e-24 at the
-# switch). Verified against a 2e6-step RK4 integration at six parameter sets
+# than the algebraically equal (e^{-kt} - e^{-at})/(a-k). `expm1(u)/u` is
+# accurate for every u != 0 -- there is no cancellation to avoid -- so the
+# four-term Taylor series is used only inside |u| < sqrt(eps(T)), where its
+# truncation error is u^4/120 in the value, u^3/30 in dphi/du and u^2/10 in
+# d2phi/du2, i.e. 8e-35, 3e-26 and 1e-17 at the Float64 switch: at or below
+# rounding for all three, which is what makes AD through the switch safe.)
+# Verified against a 2e6-step RK4 integration at six parameter sets
 # including a = k exactly: 1e-15..1e-13 relative. So the port does not
 # reimplement ODESSA; it replaces it, and the agreement with CUTEst is limited
 # by ODESSA's own 1e-12 tolerance rather than by this code -- measured 4.5e-11
 # and 7.7e-10 on `obj` at the two test points, which is the honest floor here
 # and not a defect of the port.
 #
+# ONE UNRELATED DISCREPANCY, worth knowing before it is mistaken for a bug:
+# CUTEst's x0 for QIN(K) is 0.66666666666999996, ours 0.66666666666666663.
+# The SIF computes it as `A/ QIN(K) QIN(K) MIN/H` = 40/60, so ours is the
+# correctly rounded quotient and CUTEst's start point carries about twelve
+# significant digits -- a 3.3e-12 difference that comes from SIFDECODE's
+# OUTSDIF.d, not from either model. Every comparison below evaluates both
+# models at CUTEst's x0, so it does not affect any reported agreement.
+#
 # No precision trap in BLEACHNG's value path: `FVAL`, `Fsub` and ODESSA declare
 # everything `DOUBLE PRECISION` and every literal in the value path carries a
 # `D` exponent. The one undeclared variable, `MXSTEP = 10000`, starts with M,
 # so Fortran's implicit rule makes it INTEGER, which is what it is used as.
-# (Tested both readings anyway: there is nothing to round.)
+# There is therefore no second reading to test here, as there is in RAYBENDS.
 #
 # THE REFERENCE'S GRADIENT W.R.T. QIN IS WRONG, by 39% at x0 and 60% at a
 # perturbed point, and the port does NOT reproduce it. `DF` -- the
@@ -168,7 +179,7 @@
 # finite-difference limited); the remaining 4x4 QIN-QIN block has no correct
 # reference to check against, so it is checked against a central difference of
 # this port's gradient (7e-10 .. 1.4e-7), which the reference's objective has
-# already validated. See ~/git/scratch/raybends_verify.jl.
+# already validated. `test/native_verify.jl` re-runs the comparison.
 #
 # ===========================================================================
 # Both: why an oracle and not an expression
@@ -183,7 +194,10 @@
 # singularity and not a selector. The consequence is the known upstream gap
 # recorded in CLAUDE.md: `ScalarNonlinearOracle` takes `hvp!`, not an explicit
 # `hess!`, so a full objective `hess_coord` costs one `hvp!` per Hessian column
-# -- 2050 of them for RAYBENDS. `hprod` is one call and is unaffected.
+# -- 2050 of them for RAYBENDS, measured at ~1 s for one `hess_coord`. `hprod`
+# is one call and is unaffected. (The declared pattern must be DEDUPLICATED
+# for that reconstruction to be right; see `_rb_hess_pattern`. Deduplicated,
+# RAYBENDS declares exactly the 15351 nonzeros CUTEst does.)
 
 # ===========================================================================
 # RAYBENDS
@@ -212,8 +226,9 @@ struct RaybendsTable{S}
     cz::S
 end
 
-# The five bare (single precision) constants of `Q` and `EVAL`, in the two
-# possible readings -- see the header. `0.5` is exact either way.
+# The four inexact bare (single precision) constants of `Q` and `EVAL`, in the
+# two possible readings -- see the header. The fifth, `0.5`, is exact either
+# way and needs no choice.
 _rb_const(::Type{S}, c::Float64, single::Bool) where {S} =
     S(single ? Float64(Float32(c)) : c)
 
@@ -302,7 +317,8 @@ end
                        ForwardDiff.Partials(ntuple(j -> ifelse(i == j, one(T), zero(T)),
                                                    Val(8)))),
                 Val(8))
-    return Tuple(ForwardDiff.partials(raybends_time(vd, tab)))
+    res = raybends_time(vd, tab)
+    return ntuple(i -> ForwardDiff.partials(res, i), Val(8))
 end
 
 """
@@ -373,12 +389,14 @@ const BLEACHNG_EVARS = (:kLa, :CO3g0, :CO3l0, :QIN, :CO3IN)
 `expm1(u)/u`, continued by its Taylor series to `phi(0) = 1`.
 
 The removable singularity is real: it sits at `QIN/VOLGAS = kLa`, inside the
-box the solver searches. For `|u| < 1e-8` the four-term series is used, whose
-value, first and second derivatives all agree with `expm1(u)/u` to ~1e-24
-there, so AD through the switch is safe.
+box the solver searches. `expm1(u)/u` is accurate wherever it is defined, so
+the series is used only inside `|u| < sqrt(eps(T))`, where its truncation
+error in the value and in the first two derivatives is at or below rounding --
+which is what makes AD through the switch safe. The threshold follows the
+working precision (`eps` of a `ForwardDiff.Dual` is `eps` of its value type).
 """
 @inline function bleachng_phi(u::T) where {T}
-    small = u * u < T(1.0e-16)
+    small = u * u < eps(T)
     s = one(T) + u * (one(T) / T(2) + u * (one(T) / T(6) + u * (one(T) / T(24))))
     return ifelse(small, s, expm1(u) / u)
 end
@@ -424,7 +442,7 @@ end
                                                    Val(5)))),
                 Val(5))
     out = bleachng_conc(vd, p)
-    return ForwardDiff.value(out), Tuple(ForwardDiff.partials(out))
+    return ForwardDiff.value(out), ntuple(i -> ForwardDiff.partials(out, i), Val(5))
 end
 
 """
@@ -512,7 +530,7 @@ end
 # ===========================================================================
 
 """
-    _native_hess_pattern(blocks, k) -> (rows, cols)
+    _rb_hess_pattern(blocks, k) -> (rows, cols)
 
 The deduplicated lower-triangular Hessian pattern of a set of `k`-variable
 blocks.
@@ -524,7 +542,7 @@ twice is written twice and SUMMED by the assembler -- i.e. counted twice. (The
 duplicates are harmless.) Both problems here have overlapping blocks:
 RAYBENDS' segments share knots and BLEACHNG's observations all share `kLa`.
 """
-function _native_hess_pattern(blocks, k::Int)
+function _rb_hess_pattern(blocks, k::Int)
     seen = Set{Tuple{Int,Int}}()
     rows = Int[]
     cols = Int[]
@@ -539,12 +557,12 @@ function _native_hess_pattern(blocks, k::Int)
     return rows, cols
 end
 
-function _native_oracle_backend_check(fname::AbstractString, backend)
+function _rb_backend_check(fname::AbstractString, backend)
     backend === nothing || error(
-        "$fname does not take a backend yet: the port's callbacks run on the " *
+        "$fname does not take a backend: the port's callbacks run on the " *
         "CPU. The value functions are allocation- and branch-free and so are " *
-        "GPU-safe, but wiring them into a kernel is roadmap step 4; silently " *
-        "ignoring `backend` would misreport the model as being on the device.")
+        "GPU-safe; ignoring `backend` would misreport the model as being on " *
+        "the device.")
 end
 
 """
@@ -559,9 +577,9 @@ gradient and Hessian-vector product come from ForwardDiff over
 Variables are in SIF declaration order (`sif_variable_names("RAYBENDS")`),
 which is NOT CUTEst's order.
 
-`single = false` switches the four bare Fortran constants from their Float32
-reading to a Float64 one; it is wrong by ~1e-8 against CUTEst and exists only
-to document the measurement (see the header).
+`single = false` switches the four inexact bare Fortran constants from their
+Float32 reading to a Float64 one; it is wrong against CUTEst by 7.3e-7 on
+`obj` at x0 and exists only to document the measurement (see the header).
 
 Needs no Fortran toolchain and no `sifdecoder`: the structure comes from
 `sif_decode(...; external = :defer)`.
@@ -573,7 +591,7 @@ element-type generic: [`raybends_time`](@ref) evaluates in Float32 and
 BigFloat.
 """
 function raybends_model(; T = Float64, backend = nothing, single::Bool = true)
-    _native_oracle_backend_check("raybends_model", backend)
+    _rb_backend_check("raybends_model", backend)
     P = ExaModelsSIF.sif_decode(sif_problem_path("RAYBENDS"); external = :defer)
     for (tname, fn) in P.external_types
         (tname == "TT" && fn === :FVAL) ||
@@ -585,7 +603,7 @@ function raybends_model(; T = Float64, backend = nothing, single::Bool = true)
     isempty(els) && error("RAYBENDS: no TT elements found")
     tab = raybends_table(T; single)
     n = length(P.varnames)
-    hr, hc = _native_hess_pattern((e.idx for e in els), 8)
+    hr, hc = _rb_hess_pattern((e.idx for e in els), 8)
 
     f = function (xv)
         E = eltype(xv)
@@ -648,7 +666,7 @@ Variables are in SIF declaration order. `T` other than `Float64` does not
 build today, for the upstream reason given in [`raybends_model`](@ref).
 """
 function bleachng_model(; T = Float64, backend = nothing)
-    _native_oracle_backend_check("bleachng_model", backend)
+    _rb_backend_check("bleachng_model", backend)
     P = ExaModelsSIF.sif_decode(sif_problem_path("BLEACHNG"); external = :defer)
     for (tname, fn) in P.external_types
         (tname == "A" && fn === :FVAL) ||
@@ -659,7 +677,7 @@ function bleachng_model(; T = Float64, backend = nothing)
     obs, lins = bleachng_groups(P, T)
     isempty(obs) && error("BLEACHNG: no A elements found")
     n = length(P.varnames)
-    hr, hc = _native_hess_pattern((o.idx for o in obs), 5)
+    hr, hc = _rb_hess_pattern((o.idx for o in obs), 5)
 
     f = function (xv)
         E = eltype(xv)

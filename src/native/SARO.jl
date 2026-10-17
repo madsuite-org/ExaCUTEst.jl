@@ -29,12 +29,12 @@
 # SHAPE: GENERIC JULIA FUNCTION + VectorNonlinearOracle (not folded, not an
 # expression). `SAROFN` depends on the variables, so folding is out. And the
 # chain is deep: `SRFG` runs RK4 twice, i.e. EIGHT `SREQ` evaluations of ~60
-# floating-point operations each, ~500 operations per element. As an ExaModels
-# expression that would nest ~500 type parameters; a ~30-deep chain already
-# failed to compile in an hour on a 57-variable problem (see src/native/BA.jl).
-# So the port is a plain type-generic Julia function and the derivatives come
-# from ForwardDiff over it. `SAROGN`, the ADIFOR-generated gradient routine
-# that the SIF also lists, is deliberately NOT ported.
+# floating-point operations each, ~500 operations per element. An ExaModels
+# expression nests one type parameter per operation, which makes a chain this
+# long impractical to compile -- `src/native/BA.jl` records the same wall at
+# ~30 operations. So this must stay a plain type-generic Julia function, with
+# the derivatives coming from ForwardDiff over it. `SAROGN`, the
+# ADIFOR-generated gradient routine the SIF also lists, is NOT ported.
 #
 # THE REFERENCE HAS NO SECOND DERIVATIVES. The SIF's `INDIVIDUALS` block gives
 # `F` (value) and `A`/`G` (gradient, through `SAROGN`) but no `H` section, and
@@ -43,10 +43,10 @@
 # measured, `hess_coord` is all zeros and `hprod` is the zero vector for random
 # multipliers at two points. This port's Hessian comes from AD and is the true
 # one, so it does NOT agree with the reference, and it should not: it is the
-# reference that is missing. Checked instead against a central difference of
-# CUTEst's own Jacobian (~/git/scratch/saro_verify.jl), which uses only
-# derivatives the SIF does supply: they agree to 6e-11 .. 8e-10, the accuracy a
-# central difference can deliver.
+# reference that is missing. What it can be checked against is a central
+# difference of CUTEst's own Jacobian, which uses only derivatives the SIF does
+# supply: the two agree to 6e-11 .. 4e-10, the accuracy a central difference can
+# deliver.
 #
 # ONE ORACLE FOR ALL ROWS. Each row is (one element) + (one or two linear
 # terms): F(i,k) is `FE(i,k) - X(i,k+1) = 0`, G(i,k) is `GE(i,k) - S(i,k) = 0`,
@@ -501,22 +501,20 @@ Needs no Fortran toolchain and no `sifdecoder`: the structure comes from
 `sif_decode(...; external = :defer)` and the driving data from the
 `BLOCK DATA SARCOM` appended to the same file.
 
-`T` other than `Float64` does not build today, and that is upstream, not here:
-`ExaModels._build_with_oracle` allocates its fallback work buffers as
-`zeros(n)`, i.e. `Vector{Float64}`, while the struct field is typed `VT`, so
-`ExaModelWithOracle` has no matching method. `ba_oracle_model(...; T = Float32)`
-fails the same way. The port itself is element-type generic -- see
-[`saro_stage_values`](@ref), which evaluates in Float32 and BigFloat.
+`T = Float32` builds and evaluates: `cons` then agrees with the Float64 model
+to 5e-6 relative, and [`saro_stage_values`](@ref) itself also evaluates in
+BigFloat. Building an oracle-backed model at any `T` requires an ExaModels whose
+`_build_with_oracle` types its work buffers by element type; an older revision
+allocated them as `zeros(n)` against a `VT`-typed field and failed to construct
+`ExaModelWithOracle` for every `T` but `Float64`.
 """
 function saro_oracle_model(name::AbstractString; T = Float64, backend = nothing)
-    # The oracle callbacks are CPU Julia. saro_stage_values itself is
-    # allocation- and branch-free, so a GPU path is a matter of calling it from
-    # a kernel, but that is not wired yet and quietly ignoring `backend` would
-    # misreport the model as being on the device.
+    # Refuse a backend rather than accept and ignore it: that would report the
+    # model as living on the device when its callbacks run on the host.
     backend === nothing || error(
-        "saro_oracle_model does not take a backend yet: the port's callbacks " *
-        "run on the CPU. saro_stage_values is GPU-safe, so this is step 4 of " *
-        "the roadmap, not a limitation of the port.")
+        "saro_oracle_model does not take a backend: the port's callbacks run " *
+        "on the CPU. saro_stage_values is GPU-safe, so a device path is a " *
+        "matter of calling it from a kernel.")
 
     path = sif_problem_path(name)
     P = ExaModelsSIF.sif_decode(path; external = :defer)
@@ -600,9 +598,10 @@ function saro_oracle_model(name::AbstractString; T = Float64, backend = nothing)
     end
 
     f! = function (cv, xv)
+        Base.require_one_based_indexing(cv, xv)
         E = eltype(cv)
         copyto!(cv, rconst)
-        for p in 1:nlin
+        for p in eachindex(lrow, lcol, lval)
             cv[lrow[p]] += E(lval[p]) * xv[lcol[p]]
         end
         for (si, s) in enumerate(stages)
@@ -619,8 +618,9 @@ function saro_oracle_model(name::AbstractString; T = Float64, backend = nothing)
     end
 
     jac! = function (vals, xv)
+        Base.require_one_based_indexing(vals, xv)
         E = eltype(vals)
-        for p in 1:nlin
+        for p in eachindex(lval)
             vals[p] = E(lval[p])
         end
         p = nlin
@@ -640,6 +640,7 @@ function saro_oracle_model(name::AbstractString; T = Float64, backend = nothing)
     end
 
     hess! = function (vals, xv, y)
+        Base.require_one_based_indexing(vals, xv, y)
         E = eltype(vals)
         p = 0
         for (si, s) in enumerate(stages)

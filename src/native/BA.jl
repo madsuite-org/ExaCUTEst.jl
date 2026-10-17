@@ -184,8 +184,22 @@ function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
     c, x = ExaModels.add_var(c, n; start = P.x0, lvar = P.lvar, uvar = P.uvar)
 
     # Hessian sparsity: the lower triangle of each observation's 12x12 block.
-    # Built once; duplicate (i,j) across observations are fine, ExaModels sums
-    # coordinate duplicates.
+    # Observations that share a camera or a point repeat a (row, col) pair, and
+    # the two oracle kinds want opposite things from that repetition, so the
+    # pattern is built in two forms.
+    #
+    #   The VECTOR oracle's `hess!` is called once and writes one value per
+    #   declared entry -- `y[i] * H[a,b]` for its own observation -- so the
+    #   repetition is how an entry accumulates the contributions of every
+    #   observation that touches it. Deduplicating it would drop all but one.
+    #
+    #   The SCALAR oracle has no `hess!`: ExaModels fills its declared pattern
+    #   from `hvp!`, one product per column, so every slot carrying the same
+    #   (row, col) receives the SAME already-complete second derivative. Those
+    #   repeats then sum on assembly and multiply the entry by its multiplicity
+    #   -- measured as a 92% error on BA-L1LS's assembled Hessian against the
+    #   reference, while `hprod` is exact, because `hprod` never reads the
+    #   coordinate path. So the scalar oracle must declare each entry once.
     hr = Vector{Int}(undef, 78 * nobs)
     hc = Vector{Int}(undef, 78 * nobs)
     let p = 0
@@ -194,6 +208,12 @@ function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
             i, j = o.idx[a], o.idx[b]
             hr[p], hc[p] = max(i, j), min(i, j)
         end
+    end
+    if isobj
+        seen = Set{Tuple{Int,Int}}()
+        keep = [((i, j) in seen ? false : (push!(seen, (i, j)); true))
+                for (i, j) in zip(hr, hc)]
+        hr, hc = hr[keep], hc[keep]
     end
 
     if isobj

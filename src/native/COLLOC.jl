@@ -38,20 +38,20 @@
 #     the element function uses its own, so that is what is ported).
 #
 # THE SHAPE: a generic Julia function behind an ExaModels ORACLE, because the
-# routine depends on the VARIABLES and is deep. Counting operations for one
-# ORBIT2 row with ID in 4..6: three FSYS evaluations, two of which need a
-# `^1.5`, plus the midpoint state -- about 75 elementary operations, more than
-# twice the ~30-op BA-L chain that did not finish compiling in an hour as an
-# ExaModels expression (one nested type parameter per operation). CAR2 is
-# shallower but gets the same treatment: the port is a plain function either
-# way, and that is a rule, not a judgement call per problem.
+# routine depends on the VARIABLES and is deep. One ORBIT2 row with ID in 4..6
+# is three FSYS evaluations, two of them through a `^1.5`, plus the midpoint
+# state: about 75 elementary operations. An ExaModels expression nests one type
+# parameter per operation, and a chain this long does not finish compiling --
+# `src/native/BA.jl` hits the same wall at ~30 operations. CAR2 is shallower
+# and is still a plain function: the two problems share one Fortran routine, so
+# they share one implementation.
 #
 # Derivatives come from ForwardDiff over `colloc`. The Fortran's hand-coded
 # DX/DXP/DU/DQ chain-rule block and FSYS's DFDX/DFDU/DFDQ arrays are NOT
-# ported -- porting hand-coded derivatives is what made the legacy HS67 port
-# wrong in the fourth digit.
+# ported: a transcribed derivative is a second thing to keep correct, and it
+# goes wrong in digits a casual comparison does not reach.
 #
-# TWO THINGS ABOUT THE REFERENCE, both measured, both worth knowing before
+# THREE THINGS ABOUT THE REFERENCE, all measured, all worth knowing before
 # comparing against CUTEst.
 #
 # 1. CUTEST'S HESSIAN FOR THESE PROBLEMS IS ZERO ON THE COLLOC ELEMENTS. The
@@ -63,16 +63,23 @@
 #    CAR2: CUTEst's Lagrangian Hessian has 1998 nonzeros, exactly the `2 w`
 #    diagonal of the 999 control pairs in the SQR elements, and nothing else.
 #    AD over `colloc` gives the TRUE Hessian instead (9995 nonzeros on CAR2),
-#    which agrees with a finite difference of our own Jacobian to 1e-8 and
-#    disagrees with CUTEst by the whole COLLOC contribution. Ours is the
-#    correct one -- but it is NOT the reference's, so it is not the default.
-#    `element_hessian = false` (the default) drops the COLLOC contribution
-#    and reproduces CUTEst exactly, so this model is a drop-in replacement
-#    for the Fortran on all five callbacks, which is both what the package
-#    promises and how the verification shows that nothing ELSE differs.
-#    `element_hessian = true` opts into the true Hessian -- worth doing when
-#    SOLVING these problems, where the reference's curvature is simply
-#    missing, and the reason the exact one is implemented at all.
+#    and `element_hessian = true` is the DEFAULT, for consistency across the
+#    family rather than by preference. Exactly five problems in the collection
+#    carry a `1` in that position -- BLEACHNG, CAR2, ORBIT2, SARO, SAROMM, all
+#    five external-Fortran (grep `CLASSF.DB` inside the collection artifact) --
+#    and `src/native/SARO.jl` passes `hess!` to its oracle unconditionally,
+#    with no knob, against an equally empty reference. A deliberately
+#    incomplete Hessian here would make two problems in that set of five
+#    disagree with two others.
+#    `element_hessian = false` reproduces CUTEst's Hessian exactly. Its use is
+#    diagnostic: it isolates the second derivatives, so that a comparison
+#    against the reference distinguishes "the Hessian differs, as declared"
+#    from "something else differs too".
+#    The true Hessian is adjudicated against the REFERENCE rather than against
+#    our own Jacobian, which would only be self-consistency: CUTEst's first
+#    derivatives are sound and only its `H` is missing, so a central difference
+#    of the reference's own Lagrangian gradient `J_ref(x)'y` is an independent
+#    check. See note 3.
 #
 # 2. THE REFERENCE KEEPS 11 SIGNIFICANT DIGITS OF THE INTERVAL ENDPOINTS, AND
 #    C2 AMPLIFIES THAT. The time nodes are `T(i) = (i-1)/(M-1)` and reach the
@@ -102,6 +109,16 @@
 #    RFRF = (RF/R0)^2 -- the reference's copy of that constant is likewise
 #    truncated (-0.030905307000000 against -0.030905307028187). That row has
 #    no external Fortran in it at all; it is the decoder's, not the port's.
+#
+# 3. THE TRUE HESSIAN CHECKS OUT AGAINST THE REFERENCE'S FIRST DERIVATIVES.
+#    Comparing `H v` with `(J_ref(x + h v)'y - J_ref(x - h v)'y) / 2h`, where
+#    nothing of ours enters the right-hand side: the worst relative difference
+#    over x0 and a perturbed point is 4.5e-8 for CAR2 and 3.5e-8 for ORBIT2 at
+#    h = 1e-5. Shrinking h makes it WORSE -- ~3e-7 at 1e-6, ~4e-6 at 1e-7 --
+#    which is the round-off branch of a central difference (cancellation grows
+#    as eps/h while truncation falls as h^2), i.e. the difference quotient is
+#    the inaccurate side of that comparison, not the analytic Hessian. A wrong
+#    Hessian would instead sit at a fixed relative error independent of h.
 #
 # PRECISION, and one limit that is ExaModels' rather than the port's. `colloc`
 # is generic: evaluated directly it gives the same number in Float64, Float32
@@ -293,9 +310,20 @@ end
     return colloc(f.sys, x, xp, u, z[2NX+NU+1], e.t, e.t1, e.id)
 end
 
-"Gather an element's variables out of the full vector into `z`."
+"""
+    collocgather!(z, x, e)
+
+Gather element `e`'s variables out of the full variable vector into `z`.
+
+`k` runs over the element's local variable SLOTS, not over an axis of either
+array: slot `k` reads `x[collocvar(e, k)]`, and those indices come from the
+SIF decode as absolute 1-based positions. `require_one_based_indexing` makes
+that assumption fail loudly on an offset `x` instead of silently reading the
+wrong variables.
+"""
 @inline function collocgather!(z, x, e::CollocElem)
-    @inbounds for k in 1:collocnv(e)
+    Base.require_one_based_indexing(z, x)
+    for k in 1:collocnv(e)
         z[k] = x[collocvar(e, k)]
     end
     return z
@@ -349,11 +377,11 @@ if the element type has none) and returns the FSYS to use, so a problem whose
 right-hand side carries a SIF `\$-PARAMETER` reads it from the data instead of
 hardcoding it.
 
-`element_hessian = false`, the default, makes the COLLOC elements contribute
-no second derivatives -- what the SIF declares and what SIFdecode, and so
-CUTEst, evaluates. `element_hessian = true` instead gives the TRUE Hessian by
-AD over the ported value; it is the mathematically right one and does not
-match the reference. See the header, note 1.
+`element_hessian = true`, the default, gives the TRUE Hessian by AD over the
+ported value. It is the mathematically right one and it does NOT match the
+reference, which has no COLLOC second derivatives at all.
+`element_hessian = false` drops them to match -- what the SIF declares and
+what SIFdecode, and so CUTEst, evaluates. See the header, note 1.
 
 `ref_param_rounding = true` rounds the interval endpoints TN/TN1 to the 11
 significant digits the reference's copies carry, which makes every row value
@@ -366,17 +394,15 @@ variables, a QUADRATIC section, a variable scale -- rather than quietly
 dropping it.
 """
 function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
-                      T = Float64, backend = nothing, element_hessian::Bool = false,
+                      T = Float64, backend = nothing, element_hessian::Bool = true,
                       ref_param_rounding::Bool = false,
                       kwargs...) where {NX,NU}
-    # The oracle's callbacks are CPU Julia: `colloc` itself is allocation- and
-    # branch-free and so GPU-safe, but calling it from a kernel is roadmap
-    # step 4 and is not wired. Accepting a backend silently would misreport
-    # the model as living on the device.
+    # The oracle's callbacks run on the CPU, so a backend is refused rather
+    # than ignored: accepting one would misreport the model as living on the
+    # device. `colloc` itself is allocation- and branch-free and so GPU-safe.
     backend === nothing || error(
-        "$name: colloc_model does not take a backend yet -- the COLLOC " *
-        "oracle's callbacks run on the CPU. `colloc` is GPU-safe, so this " *
-        "is roadmap step 4, not a limitation of the port.")
+        "$name: colloc_model does not take a backend -- the COLLOC oracle's " *
+        "callbacks run on the CPU. `colloc` itself is GPU-safe.")
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer, kwargs...)
     tname = "Ktyp"
     haskey(P.external_types, tname) ||
@@ -517,6 +543,7 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
                                   ForwardDiff.Chunk{nv}()) : nothing
 
     f! = (res, xv) -> begin
+        Base.require_one_based_indexing(res)
         fill!(res, zero(eltype(res)))
         for e in elems
             collocgather!(zbuf, xv, e)
@@ -525,11 +552,12 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
         nothing
     end
     jac! = (vals, xv) -> begin
+        Base.require_one_based_indexing(vals)
         p = 0
         for e in elems
             collocgather!(zbuf, xv, e)
             ForwardDiff.gradient!(gbuf, CollocRowFun(sys, e), zbuf, gcfg)
-            @inbounds for k in 1:nv
+            for k in 1:nv
                 vals[p+k] = e.w * gbuf[k]
             end
             p += nv
@@ -537,12 +565,13 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
         nothing
     end
     hess! = (vals, xv, y) -> begin
+        Base.require_one_based_indexing(vals)
         p = 0
         for e in elems
             collocgather!(zbuf, xv, e)
             ForwardDiff.hessian!(hbuf, CollocRowFun(sys, e), zbuf, hcfg)
             wy = e.w * y[e.row]
-            @inbounds for a in 1:nv, b in 1:a
+            for a in 1:nv, b in 1:a
                 p += 1
                 vals[p] = wy * hbuf[a, b]
             end

@@ -81,8 +81,7 @@
 #
 # and NOT 0.1, 0.01, 0.577350269189. The data DISCRIMINATES, decisively.
 # Measured against `CUTEstModel("JIMACK")` at x0 and at a perturbed point
-# (~/git/scratch/jimack_verify.jl), with the group-scale artifact below taken
-# out:
+# (`test/native_verify.jl`), with the group-scale artifact below taken out:
 #
 #                       obj rel      grad rel (2-norm)
 #     :single (Fortran)  0 (bitwise)  5.3e-16 / 6.2e-15
@@ -511,14 +510,13 @@ BigFloat evaluations are part of the verification.
 """
 function jimack_model(; T = Float64, backend = nothing,
                       fortran_literals::Symbol = :single)
-    # The oracle's callbacks are CPU Julia. jimack_pointwise is type-generic,
-    # allocation-free and branch-free on values, so a device path is roadmap
-    # step 4 rather than a rewrite -- but accepting a backend here would
-    # misreport where the model runs.
+    # The oracle's callbacks run on the CPU, so a backend is refused rather
+    # than ignored: accepting one would misreport where the model lives.
+    # `jimack_pointwise` is type-generic, allocation-free and branch-free on
+    # values, so a device path needs the oracle wiring and not a rewrite.
     backend === nothing || error(
-        "jimack_model does not take a backend yet: the port's callbacks run " *
-        "on the CPU. jimack_pointwise is GPU-safe, so this is step 4 of the " *
-        "roadmap, not a limitation of the port.")
+        "jimack_model does not take a backend: the port's callbacks run on " *
+        "the CPU. jimack_pointwise itself is GPU-safe.")
 
     P = ExaModelsSIF.sif_decode(sif_problem_path("JIMACK"); external = :defer)
     P.external_types == Dict("INTEGRAL" => :IEINT) || error(

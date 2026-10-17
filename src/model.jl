@@ -55,8 +55,13 @@ function ExaCUTEstModel(name::AbstractString, args...; T = Float64,
     # A verified native model beats both the decoder (which refuses these) and
     # the oracle tier (CPU-only), so prefer it. Only external-Fortran problems
     # have entries, so this cannot shadow a decodable problem.
+    # `kwargs` reach the native model too: several take options of their own
+    # (`element_hessian`, `ref_param_rounding`, `single`, `fortran_literals`)
+    # that select between readings of the Fortran, and a silently ignored
+    # keyword would hand back a model other than the one asked for. A keyword
+    # a native model does not accept raises a MethodError naming it.
     if isempty(allparams) && haskey(NATIVE_MODELS, String(name))
-        return NATIVE_MODELS[String(name)](; T, backend)
+        return NATIVE_MODELS[String(name)](; T, backend, kwargs...)
     end
     try
         return ExaModelsSIF.sif_model(path; T, backend, params = allparams, kwargs...)
@@ -155,9 +160,19 @@ function row_linearity(name::AbstractString; kwargs...)
     return (nlin = nlin, nnln = nnln)
 end
 
-function _decode(name::AbstractString; params::AbstractDict = Dict{String,Any}(), kwargs...)
+# `external = :defer` rather than ExaModelsSIF's `:error` default, because
+# every caller above asks a STRUCTURAL question -- which variables, which
+# groups, which groups are linear -- and none of those readings depends on
+# what an element function computes. Deferring makes them answer for all 1548
+# problems instead of the 1514 with no external Fortran; with `:error` they
+# throw on the 34, which is the wrong answer to "what are this problem's
+# variables called" and, worse, breaks the name-permutation step that every
+# verification of a ported model needs.
+function _decode(name::AbstractString; params::AbstractDict = Dict{String,Any}(),
+                 external::Symbol = :defer, kwargs...)
     path = occursin(".SIF", name) && isfile(name) ? abspath(name) : sif_problem_path(name)
-    return ExaModelsSIF.sif_decode(path; params = Dict{String,Any}(params), kwargs...)
+    return ExaModelsSIF.sif_decode(path; params = Dict{String,Any}(params),
+                                   external, kwargs...)
 end
 
 # NOTE on `finalize`: a CUTEstModel must be finalized before another with the
