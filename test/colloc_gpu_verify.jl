@@ -60,6 +60,7 @@
 # Guarding against a vacuous pass: every check records the magnitude of what it
 # compared, and a check whose two sides are both identically zero, or has an
 # empty side, is recorded as `vacuous` and is NOT counted as agreement.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels
 using LinearAlgebra, SparseArrays, Printf, Random
 

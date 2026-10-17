@@ -58,6 +58,7 @@
 # compared, and a check whose two sides are both identically zero, or has an
 # empty side, is recorded as `vacuous` and is NOT counted as agreement. SARO's
 # objective at `x0` is one such: it is `X(7,KMAX)`, whose start value is zero.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels
 using LinearAlgebra, SparseArrays, Printf, Random
 

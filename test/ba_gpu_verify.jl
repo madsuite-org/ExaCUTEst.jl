@@ -24,6 +24,7 @@
 # (`cons`, `jac_coord`, `hess_coord` of the constrained variants) have no
 # summation at all -- each observation owns a disjoint slice -- and they hold
 # the tight tolerance.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels
 using LinearAlgebra, SparseArrays, Printf, Random
 

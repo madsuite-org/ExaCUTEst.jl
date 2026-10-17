@@ -43,6 +43,7 @@
 #     writes the wrong slot. That is exactly how a duplicate-coordinate defect
 #     survived a first verification on a BA objective -- 92% wrong assembled,
 #     exact in `hprod`.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels
 using LinearAlgebra, SparseArrays, Printf, Random
 

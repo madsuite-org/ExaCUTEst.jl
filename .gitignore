@@ -27,6 +27,10 @@ Manifest*.toml
 LocalPreferences.toml
 JuliaLocalPreferences.toml
 
+# The GPU verification environment's preferences are part of the repository:
+# they hold the CUDA runtime at a version that supports compute capability 7.0.
+!test/gpu/LocalPreferences.toml
+
 # generated / local
 Manifest.toml
 test/Manifest.toml

@@ -381,6 +381,34 @@ contradict their own values. Those are adjudicated against a central
 difference of the lowest derivative that is trustworthy. No tolerance is
 loosened to cover a disagreement.
 
+`test/*_gpu_verify.jl` compares each GPU-capable native model against the same
+kernels on KernelAbstractions' `CPU()` backend and against the Fortran-verified
+host port:
+
+```
+julia --project=. test/jimack_gpu_verify.jl   # and ba, hs, colloc, raybends, logit, saro
+```
+
+CUDA is deliberately NOT a dependency of this package, so the package
+environment cannot resolve `using CUDA`. `test/gpu` is an environment that can,
+and each script switches to it (`test/gpu/activate.jl`). It is a **workspace
+member** of the package environment -- `[workspace]` in Project.toml -- so both
+share one Manifest.toml and resolve every package in common to one version. A
+CUDA installed in some other environment is not resolved against this one, and
+any CUDA predating LLVM.jl 10 fails to precompile against it with
+`UndefVarError: IRBuilder`.
+
+`test/gpu/LocalPreferences.toml` holds `CUDA_Runtime_jll` and
+`CUDA_Compiler_jll` at 12.9. The default runtime has dropped compute capability
+7.0, which is what the Quadro GV100 is, so without the preference CUDA refuses
+the device. Setting it is a statement about the hardware, not about the
+compiler stack: nothing pins LLVM.jl or GPUCompiler.
+
+Set `<FAMILY>_GPU_BACKEND=cpu` to compare the two host paths alone, which is
+all a machine without a GPU can do. The `gpu/host` rows are then vacuous by
+construction and read exactly 0.0; only `host/port` and `hess_vs_hprod` carry
+information. The TSV's `device` column records which backend produced a row.
+
 Needs ExaModels `sif-integration` at 555b4ed9 or later: earlier revisions have
 no `hess!` on `ScalarNonlinearOracle` (so a repeated Hessian pattern assembles
 wrong), allocate the oracle cache buffers as Float64 regardless of the model's

@@ -49,6 +49,7 @@
 # rows over 2 to 6 variables. So every check records the magnitude of what was
 # compared, and a check whose two sides are both identically zero, or has an
 # empty side, is recorded as `vacuous` and is NOT counted as a pass.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels
 using LinearAlgebra, SparseArrays, Printf, Random
 

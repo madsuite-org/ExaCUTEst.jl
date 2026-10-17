@@ -58,6 +58,7 @@
 # either side empty, reads `VACUOUS` and fails the problem. All four problems
 # are objective-only (`OUR2-RN-2-0`, `-3-0`, `-15-0`, `-10-0`), so `cons` and
 # `jac` are recorded `n/a`, which is neither a pass nor a failure.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels
 using LinearAlgebra, SparseArrays, Printf, Random
 
