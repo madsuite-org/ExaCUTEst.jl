@@ -110,7 +110,12 @@
 #
 # Every element of either problem is a function of ALL the problem's
 # variables, and each row is (one element) + (linear terms) - (group
-# constant). So the two models share one assembler:
+# constant). So the two models share one assembler -- in fact two, one per
+# builder: `_hs_oracle_model` interfaces the value cascades through host loops,
+# and `_hs_kernel_model` (end of this file) interfaces the same cascades
+# through KernelAbstractions kernels and so accepts a `backend`. The host loops
+# are what was verified against the Fortran, and the kernels are verified
+# against them. Both assemble the same shape:
 #
 #   * the 14 (HS67) / 21 (HS85) rows go into a single `VectorNonlinearOracle`
 #     in SIF group order, so row i is `sif_constraint_names(name)[i]`;
@@ -141,10 +146,10 @@
 # WHAT WAS MEASURED, INCLUDING WHAT DOES NOT MATCH
 # ===========================================================================
 #
-# ~/git/scratch/hs67_85_verify.jl, against real `CUTEstModel`s at x0 and a
-# perturbed point, permuted by SIF name. Both problems are classified `OOI2-`,
-# so the reference does supply second derivatives and the Hessian comparison
-# is meaningful. Worst relative errors over both points:
+# Against real `CUTEstModel`s at x0 and a perturbed point, permuted by SIF
+# name; `test/native_verify.jl` re-runs it. Both problems are classified
+# `OOI2-`, so the reference does supply second derivatives and the Hessian
+# comparison is meaningful. Worst relative errors over both points:
 #
 #            obj            cons   grad     jac      hess      hprod
 #   HS67     bit-equal      0      4.8e-08  1.7e-08  2.6e-10   2.5e-10
@@ -152,8 +157,7 @@
 #
 # VALUES AGREE EXACTLY, derivatives do not, and in BOTH cases the remaining
 # gap is a defect in the SIF's hand-coded derivatives rather than in the port.
-# Diagnosed, not assumed (~/git/scratch/hs67_85_diag.jl, hs67_85_diag2.jl,
-# hs85_hess_bug.jl):
+# Diagnosed, not assumed:
 #
 # HS67, the ~5e-8 gradient gap. The Fortran hand-codes its derivative
 # constants as SEPARATE bare literals -- `0.13167` and `0.013334` where the
@@ -375,9 +379,15 @@ holds the gradient of slot `s`.
 @inline function _slot_jac(vals, v::NTuple{N,T}) where {N,T}
     D = ForwardDiff.Dual{:HSJ,T,N}
     vd = ntuple(i -> D(v[i], _seed(T, Val(N), i)), Val(N))
-    out = vals(vd)
-    return map(ForwardDiff.partials, out)
+    return _slot_partials(vals(vd))
 end
+
+# `ntuple` over the slot count, not `map`: Base's `map` on a tuple recurses
+# with a splat, which for HS85's 39 slots exceeds what inference unrolls and
+# falls back to a `Vector{Any}`. That is merely slow on the host, but a heap
+# allocation inside a kernel is an `InvalidIRError`.
+@inline _slot_partials(out::NTuple{NS,Any}) where {NS} =
+    ntuple(s -> ForwardDiff.partials(out[s]), Val(NS))
 
 """
     _slot_hess(vals, v::NTuple{N,T}, w::NTuple{NS,T}) -> NTuple{N,Partials{N,T}}
@@ -677,21 +687,29 @@ reading of the Fortran's bare constants.
 function hs67_model(; T = Float64, backend = nothing,
                     single_literals::Bool = true, maxit::Int = 64)
     backend === nothing || error(
-        "hs67_model does not take a backend yet: the oracle callbacks run on " *
-        "the CPU. hs67_elements is allocation-free and GPU-safe apart from " *
-        "its data-dependent trip count, so this is roadmap step 4.")
+        "hs67_model does not take a backend: its oracle callbacks are host " *
+        "loops. Use hs67_kernel_model(; backend = ...), which evaluates the " *
+        "same hs67_elements from KernelAbstractions kernels.")
     P = ExaModelsSIF.sif_decode(sif_problem_path("HS67"); external = :defer)
+    _hs67_check_types(P)
+    k = hs67_consts(T; single_literals)
+    vals = v -> hs67_elements(v, k; maxit)
+    return _hs_oracle_model(P, vals, _hs67_slotof, HS67_EVARS, Val(8); T)
+end
+
+"Check that HS67's decode defers exactly the element types the port covers."
+function _hs67_check_types(P)
     for (tname, fn) in P.external_types
         (haskey(HS67_SLOTS, tname) && fn === :HS67) || error(
             "HS67: expected deferred element types $(sort(collect(keys(HS67_SLOTS)))) " *
             "calling HS67, found $tname => $fn")
     end
-    k = hs67_consts(T; single_literals)
-    vals = v -> hs67_elements(v, k; maxit)
-    slotof = e -> get(HS67_SLOTS, e.etype) do
-        error("HS67: element of unexpected type $(e.etype)")
-    end
-    return _hs_oracle_model(P, vals, slotof, HS67_EVARS, Val(8); T)
+    return nothing
+end
+
+"HS67 decoded element -> slot of [`hs67_elements`](@ref)'s output."
+_hs67_slotof(e) = get(HS67_SLOTS, e.etype) do
+    error("HS67: element of unexpected type $(e.etype)")
 end
 
 """
@@ -705,26 +723,407 @@ Fortran's `Y(1..20)`. The objective reads `Y5, Y12, Y13, Y14, Y16, Y17` and
 """
 function hs85_model(; T = Float64, backend = nothing)
     backend === nothing || error(
-        "hs85_model does not take a backend yet: the oracle callbacks run on " *
-        "the CPU. hs85_elements is straight-line and allocation-free, so " *
-        "this is roadmap step 4, not a limitation of the port.")
+        "hs85_model does not take a backend: its oracle callbacks are host " *
+        "loops. Use hs85_kernel_model(; backend = ...), which evaluates the " *
+        "same hs85_elements from KernelAbstractions kernels.")
     P = ExaModelsSIF.sif_decode(sif_problem_path("HS85"); external = :defer)
+    _hs85_check_types(P)
+    vals = v -> hs85_elements(v)
+    return _hs_oracle_model(P, vals, _hs85_slotof, HS85_EVARS, Val(39); T)
+end
+
+"Check that HS85's decode defers exactly the element types the port covers."
+function _hs85_check_types(P)
     for (tname, fn) in P.external_types
         (tname in ("Y", "C") && fn === :IFUN85) || error(
             "HS85: expected deferred Y/C element types calling IFUN85, found " *
             "$tname => $fn")
     end
-    vals = v -> hs85_elements(v)
-    slotof = function (e)
-        i = Int(floor(e.parvals[:PI]))           # the Fortran's INT( PI )
-        1 <= i <= 20 || error("HS85: element index $i out of 1:20")
-        if e.etype == "Y"
-            return i
-        elseif e.etype == "C"
-            i <= 19 || error("HS85: C element index $i out of 1:19")
-            return 20 + i
-        end
-        error("HS85: element of unexpected type $(e.etype)")
+    return nothing
+end
+
+"HS85 decoded element -> slot of [`hs85_elements`](@ref)'s output."
+function _hs85_slotof(e)
+    i = Int(floor(e.parvals[:PI]))               # the Fortran's INT( PI )
+    1 <= i <= 20 || error("HS85: element index $i out of 1:20")
+    if e.etype == "Y"
+        return i
+    elseif e.etype == "C"
+        i <= 19 || error("HS85: C element index $i out of 1:19")
+        return 20 + i
     end
-    return _hs_oracle_model(P, vals, slotof, HS85_EVARS, Val(39); T)
+    error("HS85: element of unexpected type $(e.etype)")
+end
+
+# ---------------------------------------------------------------------------
+# The same two value cascades called from KernelAbstractions kernels, with the
+# row tables resident on the model's backend.
+#
+# WHAT IS PARALLEL: nothing, and nothing can be. HS67's cascade contains a
+# fixed-point iteration and HS85's is one long dependency chain; every row of
+# either problem reads the SAME cascade. So each kernel runs with
+# `ndrange = 1`: one thread evaluates the cascade once and then writes all 14
+# (HS67) or 21 (HS85) rows from it. Evaluating per row instead would recompute
+# the cascade 14 or 21 times for no gain.
+#
+# The reason to have a kernel at all is that these rows must be evaluable with
+# their data on a device and scalar indexing disabled
+# (`CUDA.allowscalar(false)`), which a host loop over a device array cannot be.
+# It is not a throughput claim; 3 and 5 variables will never want a GPU.
+#
+# ONE BUILDER FOR BOTH BACKENDS. `backend = nothing` runs the same kernels on
+# KernelAbstractions' CPU backend, so a CPU-versus-GPU comparison tests the
+# device rather than two unrelated implementations; `test/hs_gpu_verify.jl` is
+# that comparison, and it also compares the host kernels against
+# `_hs_oracle_model`, which is what was verified against the Fortran.
+#
+# THE ROW TABLES ARE DENSE, AND THE JACOBIAN WITH THEM. `A[i, j]` holds row
+# i's linear coefficient for variable j and `W[i, s]` its weight on slot s, so
+# a kernel needs no per-row offsets into a packed list. Both problems have
+# N == nvar, and `_hs_oracle_model` already declares a dense N-block for every
+# row that holds an element, so the two Jacobians differ only on a row that
+# holds none: HS85's purely linear row gains three structural zeros here,
+# taking nnzj from 102 to 105. At 14 x 3 and 21 x 5 nothing is worth packing.
+# The orders differ too -- the host interleaves each row's linear entries with
+# its element blocks -- so the verification compares the two assembled rather
+# than coordinate by coordinate.
+#
+# No `@inbounds`: the gathers go through `idx`, checked once at build time by
+# `_hs_check_indices`, and the oracle value buffers are written at the lengths
+# ExaModels declared for them. ExaModels' oracle contract hands each callback a
+# dense one-based buffer of that length.
+
+"""
+    _hs_check_indices(idx, nvar)
+
+Check that the elemental-variable indices are a permutation of `1:nvar`.
+
+Two kernel properties rest on this and on nothing else. The gathers
+`x[idx[a]]` have no bounds check of their own, and on a device an out-of-range
+gather has no useful diagnosis -- it reads whatever memory is there. And the
+`hvp` kernels ASSIGN rather than accumulate into `Hv[idx[a]]`, which fills the
+whole buffer only because `idx` is onto `1:nvar`. The check runs once per
+build.
+"""
+function _hs_check_indices(idx::NTuple{N,Int}, nvar::Integer) where {N}
+    N == nvar || error("the element has $N elemental variables but the " *
+                       "problem has $nvar")
+    seen = falses(nvar)
+    for (a, j) in pairs(idx)
+        1 <= j <= nvar ||
+            error("elemental variable $a maps to index $j, outside 1:$nvar")
+        seen[j] && error("elemental variable $a repeats variable index $j")
+        seen[j] = true
+    end
+    return nothing
+end
+
+@inline _hs_gather(x, idx::NTuple{N,<:Integer}) where {N} =
+    ntuple(a -> x[idx[a]], Val(N))
+
+# Slot reductions, as plain loops over the slot index with the count taken
+# from the value tuple's type. NOT an unrolled tuple reduction: HS85 has 39
+# slots, and a 39-deep recursion over `Base.tail` is past the length inference
+# unrolls, so it falls back to a boxed accumulator -- merely slow on the host,
+# but a heap allocation inside a kernel is an `InvalidIRError`.
+@inline function _hs_slotval(W, i, out::NTuple{NS,T}) where {NS,T}
+    acc = zero(T)
+    for s in 1:NS
+        acc += T(W[i, s]) * out[s]
+    end
+    return acc
+end
+
+@inline function _hs_slotgrad(W, i, J::NTuple{NS,ForwardDiff.Partials{N,T}},
+                              a) where {NS,N,T}
+    acc = zero(T)
+    for s in 1:NS
+        acc += T(W[i, s]) * J[s][a]
+    end
+    return acc
+end
+
+"""
+    _hs_slotmults(W, y, Val(NS)) -> NTuple{NS}
+
+`sum_i y[i] * W[i, s]`, one weight per slot: the multipliers collapsed into a
+single weighted sum of element values, whose Hessian is then one AD call
+instead of one per row.
+"""
+@inline _hs_slotmults(W, y, ::Val{NS}) where {NS} =
+    ntuple(s -> begin
+               acc = zero(eltype(W))
+               for i in axes(W, 1)
+                   acc += W[i, s] * y[i]
+               end
+               acc
+           end, Val(NS))
+
+# --- kernels. `idx` is passed by value as a tuple, not as an array: N <= 5, so
+# the indices live in registers and `Val(N)` comes out of the tuple's type. The
+# objective is the one-row case -- its `A` and `W` have a single row and its
+# `y` is one 1.0 -- so it shares the value, Hessian and Hessian-vector kernels
+# with the constraint block.
+
+@kernel function _hs_val_kernel!(cv, vals, @Const(x), idx, @Const(A), @Const(W),
+                                 @Const(cst))
+    @index(Global)
+    out = vals(_hs_gather(x, idx))
+    for i in eachindex(cv)
+        acc = -cst[i]
+        for j in axes(A, 2)
+            acc += A[i, j] * x[j]
+        end
+        cv[i] = acc + _hs_slotval(W, i, out)
+    end
+end
+
+@kernel function _hs_grad_kernel!(g, vals, @Const(x), idx, @Const(A), @Const(W))
+    @index(Global)
+    J = _slot_jac(vals, _hs_gather(x, idx))
+    for a in eachindex(idx)
+        j = idx[a]
+        g[j] = A[1, j] + _hs_slotgrad(W, 1, J, a)
+    end
+end
+
+# Dense by rows: slot (i - 1) * N + a holds row i's derivative in variable
+# idx[a], which is the order `_hs_kernel_model` declares.
+@kernel function _hs_jac_kernel!(jv, vals, @Const(x), idx, @Const(A), @Const(W))
+    @index(Global)
+    J = _slot_jac(vals, _hs_gather(x, idx))
+    n = length(idx)
+    for i in axes(W, 1)
+        for a in eachindex(idx)
+            jv[(i - 1) * n + a] = A[i, idx[a]] + _hs_slotgrad(W, i, J, a)
+        end
+    end
+end
+
+@kernel function _hs_hess_kernel!(hv, vals, @Const(x), idx, @Const(W), @Const(y),
+                                  ns::Val)
+    @index(Global)
+    H = _slot_hess(vals, _hs_gather(x, idx), _hs_slotmults(W, y, ns))
+    q = 0
+    for a in eachindex(H), b in 1:a
+        q += 1
+        hv[q] = H[a][b]
+    end
+end
+
+# One thread owns every entry of `Hv` it writes, because `idx` is a permutation
+# of 1:nvar, so this assigns and needs no atomic and no preceding fill.
+@kernel function _hs_hvp_kernel!(Hv, vals, @Const(x), idx, @Const(W), @Const(y),
+                                 @Const(vv), ns::Val)
+    @index(Global)
+    H = _slot_hess(vals, _hs_gather(x, idx), _hs_slotmults(W, y, ns))
+    vl = _hs_gather(vv, idx)
+    for a in eachindex(H)
+        acc = zero(eltype(Hv))
+        for b in eachindex(vl)
+            acc += H[a][b] * vl[b]
+        end
+        Hv[idx[a]] = acc
+    end
+end
+
+"""
+    _HS67Vals{S}(k, maxit)
+
+HS67's value cascade as a callable value: `v -> hs67_elements(v, k; maxit)`,
+with the constants and the iteration bound as fields.
+
+A kernel argument has to be a bits type, which a closure over a keyword call
+is not guaranteed to be; this is.
+"""
+struct _HS67Vals{S}
+    k::NTuple{19,S}
+    maxit::Int
+end
+@inline (f::_HS67Vals)(v) = hs67_elements(v, f.k; maxit = f.maxit)
+
+"HS85's value cascade as a callable value; see [`_HS67Vals`](@ref)."
+struct _HS85Vals end
+@inline (::_HS85Vals)(v) = hs85_elements(v)
+
+"""
+    _hs_row_tables(objrow, conrows, nvar, ::Val{NS}, ::Type{T})
+        -> (oA, oW, oC, cA, cW, cC)
+
+The decoded rows as dense tables: `A[i, j]` is row i's linear coefficient for
+variable j, `W[i, s]` its weight on element slot s, and `C[i]` its group
+constant, which the row value carries with a minus sign. The objective is the
+one-row block `(oA, oW, oC)`.
+"""
+function _hs_row_tables(objrow::HSRow, conrows::Vector{HSRow}, nvar::Int,
+                        ::Val{NS}, ::Type{T}) where {NS,T}
+    fill_rows = function (rows)
+        A = zeros(T, length(rows), nvar)
+        W = zeros(T, length(rows), NS)
+        C = zeros(T, length(rows))
+        for (i, row) in pairs(rows)
+            for (j, a) in row.lin
+                A[i, j] += T(a)
+            end
+            for (sl, w) in row.slots
+                W[i, sl] += T(w)
+            end
+            C[i] = T(row.constant)
+        end
+        return A, W, C
+    end
+    oA, oW, oC = fill_rows([objrow])
+    cA, cW, cC = fill_rows(conrows)
+    return oA, oW, oC, cA, cW, cC
+end
+
+"""
+    _hs_kernel_model(P, vals, slotof, evars, Val(NS); T, backend) -> ExaModel
+
+Build an HS67/HS85-shaped model whose callbacks are KernelAbstractions kernels
+over `vals`, with the row tables resident on `backend`.
+
+Same shape as [`_hs_oracle_model`](@ref) -- one `ScalarNonlinearOracle`
+objective and one `VectorNonlinearOracle` holding every constraint row in SIF
+group order -- and the same derivatives, by [`_slot_jac`](@ref) and
+[`_slot_hess`](@ref) over the same `vals`. It differs in declaring a dense
+Jacobian and in supplying an explicit `hess!` for the objective, which is what
+lets the objective's Hessian be assembled in one call on a device instead of
+one `hvp!` per column.
+"""
+function _hs_kernel_model(P, vals, slotof, evars::NTuple{N,Symbol},
+                          ::Val{NS}; T = Float64, backend = nothing) where {N,NS}
+    all(==(1.0), P.varscale) || error("variable scaling is not supported here")
+    objrow, conrows, connames, idx = _hs_rows(P, slotof, evars)
+    nvar = length(P.varnames)
+    ncon = length(conrows)
+    _hs_check_indices(idx, nvar)
+
+    lcon = zeros(T, ncon)
+    ucon = zeros(T, ncon)
+    for (i, gn) in pairs(connames)
+        lo, hi = _hs_bounds(P.groups[gn], T)
+        lcon[i] = lo <= -1e20 ? T(-Inf) : lo
+        ucon[i] = hi >= 1e20 ? T(Inf) : hi
+    end
+
+    oAh, oWh, oCh, cAh, cWh, cCh =
+        _hs_row_tables(objrow, conrows, nvar, Val(NS), T)
+    cv = v -> ExaModels.convert_array(v, backend)
+    oA, oW, oC = cv(oAh), cv(oWh), cv(oCh)
+    cA, cW, cC = cv(cAh), cv(cWh), cv(cCh)
+    # The objective carries no multiplier; the shared kernels take one anyway.
+    one1 = cv(ones(T, 1))
+    objbuf = cv(zeros(T, 1))
+    ka = backend === nothing ? KernelAbstractions.CPU() : backend
+    ns = Val(NS)
+    sync = () -> KernelAbstractions.synchronize(ka)
+
+    # One lower triangle of the nvar x nvar block every element shares, in the
+    # order `_hs_hess_kernel!` writes it.
+    hr = Int[]
+    hc = Int[]
+    for a in 1:N, b in 1:a
+        push!(hr, max(idx[a], idx[b]))
+        push!(hc, min(idx[a], idx[b]))
+    end
+
+    c = ExaModels.ExaCore(T; backend = backend)
+    c, _ = ExaModels.add_var(c, nvar; start = P.x0, lvar = P.lvar, uvar = P.uvar)
+    sor = ExaModels.ScalarNonlinearOracle(;
+        nvar = nvar,
+        f = xv -> begin
+            _hs_val_kernel!(ka)(objbuf, vals, xv, idx, oA, oW, oC; ndrange = 1)
+            sync()
+            return sum(objbuf)
+        end,
+        grad! = (g, xv) -> begin
+            _hs_grad_kernel!(ka)(g, vals, xv, idx, oA, oW; ndrange = 1)
+            sync()
+            return g
+        end,
+        hess! = (hv, xv) -> begin
+            _hs_hess_kernel!(ka)(hv, vals, xv, idx, oW, one1, ns; ndrange = 1)
+            sync()
+            return hv
+        end,
+        hvp! = (Hv, xv, vv) -> begin
+            _hs_hvp_kernel!(ka)(Hv, vals, xv, idx, oW, one1, vv, ns; ndrange = 1)
+            sync()
+            return Hv
+        end,
+        hess_rows = copy(hr), hess_cols = copy(hc), adapt = Val(false))
+    c = ExaModels.objective(c, sor)
+
+    if ncon > 0
+        jr = Int[]
+        jc = Int[]
+        for i in 1:ncon, a in 1:N
+            push!(jr, i)
+            push!(jc, idx[a])
+        end
+        vor = ExaModels.VectorNonlinearOracle(;
+            nvar = nvar, ncon = ncon,
+            jac_rows = jr, jac_cols = jc, hess_rows = hr, hess_cols = hc,
+            lcon = lcon, ucon = ucon,
+            f! = (cvv, xv) -> begin
+                _hs_val_kernel!(ka)(cvv, vals, xv, idx, cA, cW, cC; ndrange = 1)
+                sync()
+                return cvv
+            end,
+            jac! = (jv, xv) -> begin
+                _hs_jac_kernel!(ka)(jv, vals, xv, idx, cA, cW; ndrange = 1)
+                sync()
+                return jv
+            end,
+            hess! = (hv, xv, y) -> begin
+                _hs_hess_kernel!(ka)(hv, vals, xv, idx, cW, y, ns; ndrange = 1)
+                sync()
+                return hv
+            end,
+            hvp! = (Hv, xv, y, vv) -> begin
+                _hs_hvp_kernel!(ka)(Hv, vals, xv, idx, cW, y, vv, ns; ndrange = 1)
+                sync()
+                return Hv
+            end,
+            adapt = Val(false))
+        c = ExaModels.constraint(c, vor)
+    end
+    return ExaModels.ExaModel(c)
+end
+
+"""
+    hs67_kernel_model(; T = Float64, backend = nothing, single_literals = true,
+                      maxit = 64) -> ExaModel
+
+HS67 with its callbacks as KernelAbstractions kernels over
+[`hs67_elements`](@ref), the row tables resident on `backend`.
+
+`backend = nothing` builds a host model that runs the same kernels on
+KernelAbstractions' CPU backend; `backend = CUDABackend()` builds a device
+model that never indexes a device array from the host, so it is usable with
+`CUDA.allowscalar(false)`. [`hs67_model`](@ref) builds the same problem through
+host loops and is the one verified against the Fortran directly.
+"""
+function hs67_kernel_model(; T = Float64, backend = nothing,
+                           single_literals::Bool = true, maxit::Int = 64)
+    P = ExaModelsSIF.sif_decode(sif_problem_path("HS67"); external = :defer)
+    _hs67_check_types(P)
+    vals = _HS67Vals(hs67_consts(T; single_literals), maxit)
+    return _hs_kernel_model(P, vals, _hs67_slotof, HS67_EVARS, Val(8);
+                            T, backend)
+end
+
+"""
+    hs85_kernel_model(; T = Float64, backend = nothing) -> ExaModel
+
+HS85 with its callbacks as KernelAbstractions kernels over
+[`hs85_elements`](@ref); see [`hs67_kernel_model`](@ref) for what `backend`
+buys and [`hs85_model`](@ref) for the host-loop builder.
+"""
+function hs85_kernel_model(; T = Float64, backend = nothing)
+    P = ExaModelsSIF.sif_decode(sif_problem_path("HS85"); external = :defer)
+    _hs85_check_types(P)
+    return _hs_kernel_model(P, _HS85Vals(), _hs85_slotof, HS85_EVARS, Val(39);
+                            T, backend)
 end

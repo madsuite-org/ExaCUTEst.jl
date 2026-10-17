@@ -38,6 +38,9 @@ include("native/HS67_85.jl")
 # comments and DATA are stripped)
 include("native/PARKCH_STRATEC.jl")
 include("native/JIMACK.jl")
+# after JIMACK.jl: the kernel path reuses JimackElement, jimack_elements and
+# the element value and derivative functions from it
+include("native/JIMACK_gpu.jl")
 # CAR2/ORBIT2 share one file: their SIFs append the SAME `COLLOC` driver, and
 # only the FSYS right-hand side differs (see the header there)
 include("native/COLLOC.jl")
@@ -68,6 +71,33 @@ _ba_model(p::AbstractString; T = Float64, kwargs...) =
     isbitstype(T) ? ba_kernel_model(p; T, kwargs...) :
                     ba_oracle_model(p; T, kwargs...)
 
+# JIMACK likewise has two builders that the element type picks between, and for
+# the same reason: `jimack_kernel_model`'s objective gradient and its
+# Hessian-vector product scatter-accumulate with `KernelAbstractions.@atomic`,
+# which has no implementation for a non-bits type. Its value and Hessian
+# COORDINATE callbacks do work at BigFloat -- they need no atomics -- so the
+# routing is on the whole model rather than per callback. `jimack_model`'s host
+# loops serve the non-bits case and are what was verified against the Fortran.
+#
+# The two declare DIFFERENT Hessian sparsity: `jimack_kernel_model` is
+# blockwise with duplicates (259200 entries, a disjoint write per thread),
+# `jimack_model` the deduplicated union (118824, which is also CUTEst's
+# `nnzh`). Both assemble to the same matrix, so `nnzh` here depends on the
+# element type while the Hessian does not. The duplicated pattern is what lets
+# the device `hess!` be a pure write with no atomics, which is why it is
+# bitwise reproducible across backends where a deduplicated one would not be.
+_jimack_model(; T = Float64, kwargs...) =
+    isbitstype(T) ? jimack_kernel_model(; T, kwargs...) :
+                    jimack_model(; T, kwargs...)
+
+# HS67, HS85 and HS88-HS92 each have two builders as well, and the registered
+# one is the kernel builder in every case: it accepts a `backend` and agrees
+# with the host loops to 9e-16 over every callback at two points
+# (test/hs_gpu_verify.jl). They need no `isbitstype` gate, unlike the two
+# above, because every item they evaluate is written by a single thread, so no
+# kernel uses `KernelAbstractions.@atomic` and all three precisions build and
+# evaluate through them.
+
 """
     NATIVE_MODELS :: Dict{String,Function}
 
@@ -83,20 +113,20 @@ const NATIVE_MODELS = Dict{String,Function}(
                "BA-L49", "BA-L49LS", "BA-L52", "BA-L52LS", "BA-L73", "BA-L73LS"))...,
     (p => (; kwargs...) -> vandanium_model(p; kwargs...)
      for p in ("VANDANIUMS", "VANDANMSLS"))...,
-    "HS88" => hs88_model,
-    "HS89" => hs89_model,
-    "HS90" => hs90_model,
-    "HS91" => hs91_model,
-    "HS92" => hs92_model,
+    "HS88" => hs88_kernel_model,
+    "HS89" => hs89_kernel_model,
+    "HS90" => hs90_kernel_model,
+    "HS91" => hs91_kernel_model,
+    "HS92" => hs92_kernel_model,
     "AKIVA" => akiva_model,
     "HIELOW" => hielow_model,
     "SARO" => saro_model,
     "SAROMM" => saromm_model,
-    "HS67" => hs67_model,
-    "HS85" => hs85_model,
+    "HS67" => hs67_kernel_model,
+    "HS85" => hs85_kernel_model,
     "PARKCH" => parkch_model,
     "STRATEC" => stratec_model,
-    "JIMACK" => jimack_model,
+    "JIMACK" => _jimack_model,
     "CAR2" => car2_model,
     "ORBIT2" => orbit2_model,
     "RAYBENDS" => raybends_model,

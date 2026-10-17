@@ -75,10 +75,38 @@ precisions) to make sure we have correct impl -> done!"
    implementation **over the whole collection**, not a sample. ("15k" in the
    dictation is 1.5k, i.e. the 1548 problems.)
 
-   Done for the 12 `BA-L*` (`src/native/BA_gpu.jl`, `test/ba_gpu_verify.jl`)
-   and inherent for the two constant-folded families (`HS68`/`HS69`,
-   `VANDANIUM*`), which are ordinary SIMD ExaModels. The other 22 refuse a
-   backend, in nine files.
+   Done for 24 of the 34: the 12 `BA-L*` (`src/native/BA_gpu.jl`), JIMACK
+   (`JIMACK_gpu.jl`), `HS67`/`HS85`/`HS88`-`HS92` (kernels in their own
+   files), and inherent for the two constant-folded families (`HS68`/`HS69`,
+   `VANDANIUM*`), which are ordinary SIMD ExaModels. Each has a
+   `test/*_gpu_verify.jl` beside it.
+
+   Eight refuse a backend: `CAR2`, `ORBIT2`, `RAYBENDS`, `BLEACHNG`, `AKIVA`,
+   `HIELOW`, `PARKCH`, `STRATEC`. `SARO`/`SAROMM` are out of scope (Sungho
+   2026-10-17) -- each stage is ~500 operations under twice-nested 11-partial
+   duals, which already forced `@noinline` on the host.
+
+   WHETHER A PORT NEEDS AN ELEMENT-TYPE GATE DEPENDS ON ONE THING: whether any
+   of its kernels uses `KernelAbstractions.@atomic`, which has no
+   implementation for a non-bits type and so fails at `T = BigFloat` even with
+   `backend = nothing`, since the kernels run through KA's CPU backend either
+   way. A scatter into a shared slot needs atomics (BA's objective gradient,
+   JIMACK's `grad`/`hvp`), so those route on `isbitstype(T)` to the host-loop
+   builder -- see `_ba_model` and `_jimack_model`. Where every item is written
+   by a single thread (the HS kernels, JIMACK's `hess!`), no atomics and no
+   gate are needed and all three precisions work through the kernel builder.
+   BigFloat is how a Float64 result gets arbitrated, so the fallback is not
+   optional.
+
+   THE TWO WORKED EXAMPLES CHOSE DIFFERENT HESSIAN PATTERNS and both are
+   defensible, so state the choice rather than copying one: BA declares the
+   deduplicated union, JIMACK blockwise with duplicates (259200 against the
+   host builder's and CUTEst's 118824) so that `hess!` is a pure disjoint
+   write needing no atomics, which is what makes it bitwise reproducible
+   across backends. `nnzh` therefore depends on the element type for JIMACK
+   while the assembled Hessian does not. `test/native_verify.jl` compares
+   Hessians as assembled symmetric matrices, which is pattern-independent and
+   so adjudicates either choice.
 
    They all have the same shape -- map a generic function over N independent
    items (observations, collocation rows, finite elements, RK4 stages,

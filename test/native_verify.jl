@@ -56,7 +56,7 @@ const BIG_SCALAR_HESS = 2_000
 # These are the problems the duplicate-coordinate defect lived in, so they are
 # the ones where coordinate-path coverage is worth the most.
 const EXPLICIT_HESS = Set(["BA-L1LS", "BA-L16LS", "BA-L21LS", "BA-L49LS",
-                           "BA-L52LS", "BA-L73LS"])
+                           "BA-L52LS", "BA-L73LS", "JIMACK"])
 
 # --- where the reference is not the standard ---------------------------------
 
@@ -364,12 +364,23 @@ function verify(name; ndir = 3, seed = 20261016)
                         "assembled hess_coord against hprod, both ours: \
 $(nnz(Ho)) declared, $(nnz(dropzeros(Ho))) distinct nonzeros"))
                     if hmode === :direct
+                        # SYMMETRIZE BEFORE PERMUTING. Both sides store a lower
+                        # triangle, and a permuted lower triangle is not lower
+                        # triangular: with p = [2,1,3,4], an entry at (2,1)
+                        # lands at (1,2). Comparing `Ho[pv, pv]` against the
+                        # reference's triangle therefore compares an entry
+                        # against a structural zero and vice versa, wrongly, on
+                        # any problem whose variable permutation is not the
+                        # identity. The full symmetric matrices are the
+                        # permutation-invariant objects.
                         Hr = hsparse(ref, xr, yr)
-                        Hop = Ho[pv, pv]
-                        push!(checks, Chk("hess", pt, rel(Hop, Hr), tol(name, "hess"), ""))
+                        Hrs = Hr .+ Hr' .- spdiagm(0 => diag(Hr))
+                        Hosp = Hs[pv, pv]
+                        push!(checks, Chk("hess", pt, rel(Hosp, Hrs),
+                                          tol(name, "hess"), "symmetrized"))
                         push!(checks, Chk("hessstruct", pt,
-                            Float64(nnz(dropzeros(Hop)) != nnz(dropzeros(Hr))), 0.0,
-                            "nnz ours=$(nnz(dropzeros(Hop))) ref=$(nnz(dropzeros(Hr)))"))
+                            Float64(nnz(dropzeros(Hosp)) != nnz(dropzeros(Hrs))), 0.0,
+                            "symmetrized nnz ours=$(nnz(dropzeros(Hosp))) ref=$(nnz(dropzeros(Hrs)))"))
                     end
                 end
             end
