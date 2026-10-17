@@ -123,6 +123,15 @@ bit-exact, while 9, 10, 12, 13 and 14 digits all fail"),
     ("VANDANIUMS", "jac") => (5e-11, "as cons, split between the element \
 weights 1/E (9.18e-12) and the parameter H = 5.5/19 (1.94e-12)"),
     ("VANDANMSLS", "grad") => (5e-11, "as VANDANIUMS jac"),
+    # The same truncation reaches the second derivatives, measured rather than
+    # carried over from the first: with `ref_param_rounding = true` hprod goes
+    # from 1.98e-11 to 8.05e-16 and the assembled Hessian from 1.65e-11 to
+    # exactly 0.0, at x0 and at the perturbed point. VANDANIUMS needs no such
+    # entry -- its hprod and hess agree exactly either way.
+    ("VANDANMSLS", "hprod") => (5e-11, "11-digit OUTSDIF.d, same as grad; \
+ref_param_rounding = true takes it to 8e-16"),
+    ("VANDANMSLS", "hess") => (5e-11, "11-digit OUTSDIF.d, same as grad; \
+ref_param_rounding = true takes it to exactly 0.0"),
     ("RAYBENDS", "hprod") => (1e-12, "1026 spline segments summed in a \
 different order"),
     ("RAYBENDS", "hess") => (1e-12, "as hprod"),
