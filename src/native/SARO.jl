@@ -502,24 +502,26 @@ Needs no Fortran toolchain and no `sifdecoder`: the structure comes from
 `BLOCK DATA SARCOM` appended to the same file.
 
 `T != Float64` builds, and `cons` evaluates (agreeing with the Float64 model
-to 5e-6 in Float32), but `jac` and `hess` do NOT, for two independent reasons
-that are worth separating because fixing either alone leaves the other.
+to 5e-6 in Float32, and finite in every precision), but in Float32 `jac` and
+`hess` do not.
 
-ExaModels allocates the oracle cache's callback buffers as untyped `zeros(n)`,
-so the callbacks here see `E = eltype(vals) === Float64` and convert the
-variables to `E` while `stagedata` stays in `T`. `saro_rk4` ties the control's
-type to the state's, so the mixed pair has no method:
-`saro_stage_jac(::NTuple{11,Float32}, ::NTuple{11,Float32}, ::NTuple{11,Float64})`.
-Typing those buffers upstream removes it; relaxing the control's type parameter
-here would harden the port against it.
-
-In Float32 the Jacobian and Hessian are then NaN at every stage. The second
+In Float32 the Jacobian and Hessian are non-finite at every stage. The second
 RK4 call zeroes the collector terms, so `saro_rhs` forms
 `x6 + v18/(1.16111111111111e-27 + 1161.11 v19)` with `v18 = v19 = 0`, and
 ForwardDiff's quotient rule squares the denominator: `Float32(1.161e-27)^2`
 underflows to zero and gives `0/0`, where Float64 gives a normal 1.35e-54. The
 regulariser is the Fortran's constant and stays; a Float32-safe port needs the
 division restructured so it is never squared.
+
+Measured in both populations, which agree on the same 28105 entries and so tie
+them to one defect: `saro_stage_jac` called directly with uniform Float32
+arguments is non-finite in 28105 of 44165 entries, at 365 of 365 stages, and 0
+of 44165 in Float64; through the model, `jac_coord` is non-finite in 28105 of
+SARO's 48180 entries and 28105 of SAROMM's 50370, and `hess_coord` in all
+24090 of both. Every stage qualifies because `saro_stage_data` zeroes `db`'s
+positions 4:11 for every stage, not just one. The two proportions differ only
+because the coordinate array interleaves stage blocks with the 4015 linear
+entries, which stay finite.
 
 [`saro_stage_values`](@ref) itself is generic and evaluates in Float32 and
 BigFloat whenever the data and the values share a type.
