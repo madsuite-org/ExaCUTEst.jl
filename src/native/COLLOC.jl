@@ -51,6 +51,58 @@
 # ported -- porting hand-coded derivatives is what made the legacy HS67 port
 # wrong in the fourth digit.
 #
+# TWO THINGS ABOUT THE REFERENCE, both measured, both worth knowing before
+# comparing against CUTEst.
+#
+# 1. CUTEST'S HESSIAN FOR THESE PROBLEMS IS ZERO ON THE COLLOC ELEMENTS. The
+#    SIF's `Ktyp` INDIVIDUALS block gives `F`, an `A F` alternative and one
+#    `G` line per elemental variable -- and no `H` lines at all. SIFdecode
+#    therefore takes the element's second derivatives to be zero, which the
+#    classification string says out loud: `LOR1-RN-V-V`, whose fourth
+#    character `1` means only first derivatives are provided. Measured on
+#    CAR2: CUTEst's Lagrangian Hessian has 1998 nonzeros, exactly the `2 w`
+#    diagonal of the 999 control pairs in the SQR elements, and nothing else.
+#    AD over `colloc` gives the TRUE Hessian instead (9995 nonzeros on CAR2),
+#    which agrees with a finite difference of our own Jacobian to 1e-8 and
+#    disagrees with CUTEst by the whole COLLOC contribution. Ours is the
+#    correct one -- but it is NOT the reference's, so it is not the default.
+#    `element_hessian = false` (the default) drops the COLLOC contribution
+#    and reproduces CUTEst exactly, so this model is a drop-in replacement
+#    for the Fortran on all five callbacks, which is both what the package
+#    promises and how the verification shows that nothing ELSE differs.
+#    `element_hessian = true` opts into the true Hessian -- worth doing when
+#    SOLVING these problems, where the reference's curvature is simply
+#    missing, and the reason the exact one is implemented at all.
+#
+# 2. THE REFERENCE KEEPS 11 SIGNIFICANT DIGITS OF THE INTERVAL ENDPOINTS, AND
+#    C2 AMPLIFIES THAT. The time nodes are `T(i) = (i-1)/(M-1)` and reach the
+#    element function as the parameters TN/TN1. SIFdecode writes element
+#    parameters out in a D-format, and the copies the compiled Fortran reads
+#    carry 11 significant decimal digits. `TOR = TN1 - TN` is a cancelling
+#    subtraction of two numbers up to 1000x larger, so that truncation becomes
+#    a relative error of up to ~9e-9 in `C2 = 3/(2 TOR)` -- and C2 is the
+#    largest Jacobian entry in either problem.
+#    Measured, not inferred: for a CAR2 ID=1 row the Fortran's derivative
+#    w.r.t. X(1) is exactly -C2, so TOR is recoverable from CUTEst's own
+#    Jacobian. Over all 999 such rows, the recovered TOR equals
+#    `round(TN1, sigdigits = 11) - round(TN, sigdigits = 11)` with relative
+#    error 0.0, and differs from exact SIF arithmetic by up to 8.99e-9;
+#    9, 10, 12 and 13 significant digits all fail. With TN/TN1 so rounded,
+#    `colloc` reproduces the Fortran's value for every one of CAR2's 3996 and
+#    ORBIT2's 1794 rows at relative error 0.0, at x0 and at a perturbed point.
+#    So the ~1e-8 gap is the reference's stored precision and nothing else.
+#    `ref_param_rounding = true` reproduces it. The default is `false`: the
+#    full-precision values are what the SIF says, and rounding element
+#    parameters to SIFdecode's output format is a decision for ExaModelsSIF to
+#    take for the whole collection, not a fudge inside one port.
+#    The same truncation shows up once more, outside this port's reach: with
+#    `ref_param_rounding = true` CAR2 agrees with the Fortran on every row at
+#    relative error 0.0, and ORBIT2 agrees on all 1794 COLLOC rows at 0.0 but
+#    keeps 2.7e-11 on row L1, whose group CONSTANT is the SIF-computed
+#    RFRF = (RF/R0)^2 -- the reference's copy of that constant is likewise
+#    truncated (-0.030905307000000 against -0.030905307028187). That row has
+#    no external Fortran in it at all; it is the decoder's, not the port's.
+#
 # ASSEMBLY, and why it is an `add_eval` and not a `VectorNonlinearOracle`.
 # Neither problem is external all the way through: besides the K rows (one
 # COLLOC element each) there is a linear objective `Q`, the control-magnitude
@@ -246,6 +298,16 @@ end
 # Everything below is wiring. The mathematics is entirely in `colloc` and the
 # two FSYS structs, and every derivative is AD over `CollocRowFun`.
 
+"""
+    _colloc_par(v, ref_rounding)
+
+An interval endpoint as the element function should see it: the SIF's exact
+value, or -- with `ref_rounding` -- rounded to the 11 significant decimal
+digits SIFdecode's output format preserves. See the header, note 2.
+"""
+@inline _colloc_par(v::Real, ref_rounding::Bool) =
+    ref_rounding ? round(v, sigdigits = 11) : v
+
 "The element types these two SIFs use besides the external one."
 const _COLLOC_PLAIN_ETYPES = ("SQR", "PROD")
 
@@ -266,7 +328,8 @@ function _colloc_conbounds(g, ::Type{T}) where {T}
 end
 
 """
-    colloc_model(name, sysfor, Val(NX), Val(NU); T, backend) -> ExaModel
+    colloc_model(name, sysfor, Val(NX), Val(NU); T, backend,
+                 element_hessian, ref_param_rounding, kwargs...) -> ExaModel
 
 Build a `COLLOC`-family problem: the non-external part (linear objective,
 SQR/PROD elements, linear terms, constants, group scales) as ordinary
@@ -278,13 +341,26 @@ if the element type has none) and returns the FSYS to use, so a problem whose
 right-hand side carries a SIF `\$-PARAMETER` reads it from the data instead of
 hardcoding it.
 
+`element_hessian = false`, the default, makes the COLLOC elements contribute
+no second derivatives -- what the SIF declares and what SIFdecode, and so
+CUTEst, evaluates. `element_hessian = true` instead gives the TRUE Hessian by
+AD over the ported value; it is the mathematically right one and does not
+match the reference. See the header, note 1.
+
+`ref_param_rounding = true` rounds the interval endpoints TN/TN1 to the 11
+significant digits the reference's copies carry, which makes every row value
+agree with the compiled Fortran bit for bit. The default `false` uses the
+SIF's exact values; see the header for the measurement.
+
 Refuses anything in the decode it is not prepared to reproduce exactly -- a
 group type, an unexpected element type, an objective element, internal
 variables, a QUADRATIC section, a variable scale -- rather than quietly
 dropping it.
 """
 function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
-                      T = Float64, backend = nothing, kwargs...) where {NX,NU}
+                      T = Float64, backend = nothing, element_hessian::Bool = false,
+                      ref_param_rounding::Bool = false,
+                      kwargs...) where {NX,NU}
     # The oracle's callbacks are CPU Julia: `colloc` itself is allocation- and
     # branch-free and so GPU-safe, but calling it from a kernel is roadmap
     # step 4 and is not wired. Accepting a backend silently would misreport
@@ -370,7 +446,8 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
                     ntuple(k -> e.varmap[Symbol("XF", k)], Val(NX)),
                     ntuple(k -> e.varmap[Symbol("UV", k)], Val(NU)),
                     e.varmap[:QV1],
-                    T(e.parvals[:TN]), T(e.parvals[:TN1]),
+                    T(_colloc_par(e.parvals[:TN], ref_param_rounding)),
+                    T(_colloc_par(e.parvals[:TN1], ref_param_rounding)),
                     Int(trunc(e.parvals[:ID])), i, w))
                 haskey(e.parvals, :COEFRI) && push!(coefri, e.parvals[:COEFRI])
             elseif ten == "SQR"
@@ -423,10 +500,13 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
     zbuf = Vector{T}(undef, nv)
     gbuf = Vector{T}(undef, nv)
     hbuf = Matrix{T}(undef, nv, nv)
+    # One config per model, shared by every element: CollocRowFun is a struct,
+    # so all the elements' functions have the same type and so the same AD tag.
     gcfg = ForwardDiff.GradientConfig(CollocRowFun(sys, elems[1]), zbuf,
                                       ForwardDiff.Chunk{nv}())
-    hcfg = ForwardDiff.HessianConfig(CollocRowFun(sys, elems[1]), zbuf,
-                                     ForwardDiff.Chunk{nv}())
+    hcfg = element_hessian ?
+        ForwardDiff.HessianConfig(CollocRowFun(sys, elems[1]), zbuf,
+                                  ForwardDiff.Chunk{nv}()) : nothing
 
     f! = (res, xv) -> begin
         fill!(res, zero(eltype(res)))
@@ -462,25 +542,28 @@ function colloc_model(name::AbstractString, sysfor, ::Val{NX}, ::Val{NU};
         nothing
     end
 
+    # Lower triangle of each element's dense nv x nv block. Pairs repeat
+    # across elements (Q sits in every one); ExaModels sums coordinate
+    # duplicates, and its hprod walks the entries additively.
+    hstruct! = (rows, cols) -> begin
+        for e in elems, a in 1:nv, b in 1:a
+            i, j = collocvar(e, a), collocvar(e, b)
+            push!(rows, max(i, j))
+            push!(cols, min(i, j))
+        end
+    end
     c, _ = ExaModels.add_eval(c, (con,), (x,), f!;
-        jac! = jac!, hess! = hess!,
-        nnzj = nv * nel, nnzh = (nv * (nv + 1) ÷ 2) * nel,
+        jac! = jac!,
+        hess! = element_hessian ? hess! : nothing,
+        nnzj = nv * nel,
+        nnzh = element_hessian ? (nv * (nv + 1) ÷ 2) * nel : 0,
         jac_structure! = (rows, cols) -> begin
             for e in elems, k in 1:nv
                 push!(rows, e.row)
                 push!(cols, collocvar(e, k))
             end
         end,
-        # Lower triangle of each element's dense nv x nv block. Pairs repeat
-        # across elements (Q sits in every one); ExaModels sums coordinate
-        # duplicates, and its hprod walks the entries additively.
-        hess_structure! = (rows, cols) -> begin
-            for e in elems, a in 1:nv, b in 1:a
-                i, j = collocvar(e, a), collocvar(e, b)
-                push!(rows, max(i, j))
-                push!(cols, min(i, j))
-            end
-        end,
+        hess_structure! = element_hessian ? hstruct! : nothing,
         adapt = Val(false))
 
     return ExaModels.ExaModel(c)
@@ -491,7 +574,9 @@ end
 
 CAR2 -- minimum-time traverse of a point mass with friction -- with its
 external `COLLOC` supplied by [`colloc`](@ref) and `CarODE` instead of by
-compiled Fortran. `kwargs` go to `ExaModelsSIF.sif_decode`.
+compiled Fortran. `element_hessian` and `ref_param_rounding` are described
+under [`colloc_model`](@ref); any other `kwargs` go to
+`ExaModelsSIF.sif_decode`.
 """
 car2_model(; T = Float64, backend = nothing, kwargs...) =
     colloc_model("CAR2", cf -> CarODE(T(only(unique(cf)))), Val(4), Val(2);
@@ -502,7 +587,9 @@ car2_model(; T = Float64, backend = nothing, kwargs...) =
 
 ORBIT2 -- minimum-time low-thrust orbit transfer -- with its external
 `COLLOC` supplied by [`colloc`](@ref) and [`orbit2_ode`](@ref) instead of by
-compiled Fortran. `kwargs` go to `ExaModelsSIF.sif_decode`.
+compiled Fortran. `element_hessian` and `ref_param_rounding` are described
+under [`colloc_model`](@ref); any other `kwargs` go to
+`ExaModelsSIF.sif_decode`.
 """
 orbit2_model(; T = Float64, backend = nothing, kwargs...) =
     colloc_model("ORBIT2", _ -> orbit2_ode(T), Val(6), Val(3);

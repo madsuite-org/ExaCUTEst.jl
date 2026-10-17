@@ -31,6 +31,7 @@ include("native/VANDANIUM.jl")
 include("native/HS88_92.jl")
 include("native/LOGIT.jl")
 include("native/SARO.jl")
+include("native/HS67_85.jl")
 
 """
     NATIVE_MODELS :: Dict{String,Function}
@@ -56,6 +57,8 @@ const NATIVE_MODELS = Dict{String,Function}(
     "HIELOW" => hielow_model,
     "SARO" => saro_model,
     "SAROMM" => saromm_model,
+    "HS67" => hs67_model,
+    "HS85" => hs85_model,
 )
 
 """
