@@ -63,14 +63,49 @@ precisions) to make sure we have correct impl -> done!"
    `runs/ba_verify_2026-10-16.tsv`). Oracle tier 32 -> 20.
 3. **Verify the pure-Julia versions against the Fortran callbacks** -- this
    one IS independent, unlike step 1, because the two implementations are
-   genuinely different. It is what caught HS67. Done for the 12 BA-L*
-   problems; 20 to go.
+   genuinely different. It is what caught HS67. **DONE: 34/34 PASS over 602
+   checks** (`test/native_verify.jl`). Coverage is uneven by construction and
+   the per-problem check count says how: 23 where the reference can
+   adjudicate every callback, 19 where its Hessian cannot, 17 where its first
+   derivatives cannot either, 11 for BLEACHNG where only its objective can,
+   and 9 where the Hessian-coordinate path is out of reach at that size.
 4. **GPU compatibility.** Acceptance criterion, stated concretely: a model
    must be constructible with **scalar indexing disabled**
    (`CUDA.allowscalar(false)`), and its callbacks verified against the CPU
    implementation **over the whole collection**, not a sample. ("15k" in the
    dictation is 1.5k, i.e. the 1548 problems.)
-5. **Full verification again**: CPU, GPU, and multiple precisions.
+
+   Done for the 12 `BA-L*` (`src/native/BA_gpu.jl`, `test/ba_gpu_verify.jl`)
+   and inherent for the two constant-folded families (`HS68`/`HS69`,
+   `VANDANIUM*`), which are ordinary SIMD ExaModels. The other 22 refuse a
+   backend, in nine files.
+
+   They all have the same shape -- map a generic function over N independent
+   items (observations, collocation rows, finite elements, RK4 stages,
+   estimation-sample records) and scatter the results -- so one abstraction
+   should serve them, and `BA_gpu.jl` is what it would be extracted from. It
+   is NOT extracted yet, deliberately: one instance is not enough to tell
+   which parts are general. The dimensions that actually vary are the
+   elemental-variable count per item (12 BA, 24 JIMACK, 11 SARO and COLLOC,
+   8 RAYBENDS), whether an item yields one value or several (SARO's stage
+   gives 11 rows), and whether the scatter needs atomics (an objective
+   gradient does; disjoint row writes do not). Port a second one bespoke
+   before generalizing.
+
+   One thing the acceptance criterion settles: a problem with three variables
+   still needs kernels. Running a host callback against device arrays requires
+   scalar indexing, so "accepts a backend" and "scalar indexing disabled" are
+   the same requirement, and the small problems are not exempt. For AKIVA,
+   HIELOW, PARKCH and STRATEC the work is worth it anyway -- their variable
+   count is tiny but the reduction runs over an estimation sample of tens of
+   thousands of records.
+5. **Full verification again**: CPU, GPU, and multiple precisions. Two
+   failures are already known and are properties of the ports rather than
+   bugs to fix blindly: SARO and SAROMM have non-finite Float32 derivatives
+   because `Float32(1.16111111111111e-27)^2` underflows to zero inside
+   ForwardDiff's quotient rule where Float64 gives a normal 1.35e-54, and the
+   regulariser is the Fortran's own constant. A Float32-safe port needs the
+   division restructured so it is never squared.
 
 Until step 2 lands, GPU verification stays out of scope (see below) and
 solver testing is explicitly NOT wanted: "solve is not a too much concern
