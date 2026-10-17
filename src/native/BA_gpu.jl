@@ -1,50 +1,51 @@
-# BA_gpu.jl -- the BA-L* family on a GPU (roadmap step 4).
+# The BA-L* family as an ExaModel whose oracle callbacks are
+# KernelAbstractions kernels over `ba_residual`, with the observation data
+# resident on the model's backend.
 #
-# src/native/BA.jl ports the bundle-adjustment reprojection to a generic Julia
-# function, `ba_residual`, and wires it to ExaModels as an external oracle
-# whose callbacks are host loops. This file replaces those loops with
-# KernelAbstractions kernels over the observations, so the SAME `ba_residual`
-# runs on the device and the model is constructible and evaluable with
-# `CUDA.allowscalar(false)` in force.
+# `ba_oracle_model` (BA.jl) interfaces the same `ba_residual` through host
+# loops. This file's kernels let the model be built and evaluated with scalar
+# indexing of device arrays disabled (`CUDA.allowscalar(false)`), which host
+# loops over a device array cannot be.
 #
-# WHY A KERNEL AND NOT AN ExaModels EXPRESSION. Unchanged from BA.jl: built as
-# a symbolic expression the ~30-deep reprojection chain did not finish
-# compiling in an hour on a 57-variable problem. The generic function is the
-# port; this file is only the launch wiring.
+# WHY A KERNEL AND NOT AN ExaModels EXPRESSION. Unchanged from BA.jl: the
+# ~30-deep reprojection chain nests an ExaModels type parameter per operation
+# and does not finish compiling. The generic function is the port; this file is
+# only the launch wiring.
 #
 # WHAT IS PARALLEL. One observation per thread. Each observation reads exactly
-# 12 variables, writes 1 constraint row (or one objective contribution), 12
-# Jacobian values and a 78-entry Hessian lower triangle. BA-L52 has 694346
-# observations over 192627 variables, which is as embarrassingly parallel as
-# this collection gets.
+# twelve variables and writes one constraint row (or one objective
+# contribution), twelve Jacobian values and a 78-entry Hessian lower triangle.
+# BA-L52 has 694346 observations over 192627 variables.
 #
-# DERIVATIVES. ForwardDiff inside the kernel, over `ba_residual`, exactly as on
-# the host: `Dual` is a plain immutable over an `NTuple`, so for a fixed 12
-# inputs it is stack-allocated and GPU-legal. First order uses one `Dual`
-# level with 12 partials; second order nests a second level, 169 components per
-# intermediate value. That is heavy on registers and spills to local memory,
-# but it compiles and runs -- measured, not assumed (see
-# ~/git/scratch/ba_gpu/verify_ba_gpu.jl).
+# DERIVATIVES. ForwardDiff inside the kernel, over `ba_residual`, as on the
+# host: `Dual` is an immutable over an `NTuple`, so for a fixed twelve inputs
+# it is stack-allocated and GPU-legal. First order uses one `Dual` level with
+# twelve partials; second order nests a second level, 169 components per
+# intermediate value -- heavy on registers, and it spills to local memory.
 #
 # SCATTER. Observations share camera and intrinsic variables, so the objective
-# gradient and the Hessian-vector products scatter-accumulate with atomics.
-# The constraint/Jacobian/Hessian *coordinate* callbacks do not: each
-# observation owns a disjoint slice of the value array, so those kernels are
-# pure writes and the duplicate (row, col) coordinates are summed later by
-# whoever assembles the matrix.
+# gradient and both Hessian-vector products scatter-accumulate with atomics.
+# The constraint/Jacobian/Hessian COORDINATE callbacks do not: each observation
+# owns a disjoint slice of the value array, so those kernels are pure writes
+# and the duplicate (row, col) coordinates are summed by whoever assembles the
+# matrix.
 #
-# ONE BUILDER FOR BOTH SIDES. `backend = nothing` runs the same kernels on
-# KernelAbstractions' CPU backend rather than taking a different code path, so
-# a CPU-versus-GPU comparison tests the device, not two unrelated
-# implementations. `ba_oracle_model` (BA.jl) remains the host reference that
-# was verified against the Fortran.
+# ONE BUILDER FOR BOTH BACKENDS. `backend = nothing` runs the same kernels on
+# KernelAbstractions' CPU backend. A CPU-versus-GPU comparison therefore tests
+# the device rather than two unrelated implementations; `test/ba_gpu_verify.jl`
+# is that comparison.
+#
+# Requires `hess!` on ExaModels' `ScalarNonlinearOracle` (ExaModels
+# `sif-integration` 555b4ed9 or later). Without it the `*LS` variants'
+# `hess_coord` has no device path: ExaModels would reconstruct the declared
+# sparsity one Hessian column at a time, indexing the value array slot by slot.
 
 using KernelAbstractions
 
 # ---------------------------------------------------------------------------
 # ForwardDiff seeding, written out rather than going through
 # ForwardDiff.gradient/hessian: those take an `AbstractVector`, allocate a
-# result, and consult a mutable tag counter -- none of which is available in a
+# result, and consult a mutable tag counter, none of which is available in a
 # kernel. Seeding by hand keeps everything in registers.
 
 struct _BATagInner end
@@ -68,16 +69,17 @@ end
     return ForwardDiff.Partials{N, DI}(ntuple(_ -> DI(zero(T), z), Val(N)))
 end
 
-# `rodrigues` as a positional `Bool` -- a keyword call inside a kernel is
-# legal but needlessly hard to read in the generated code.
+# `rodrigues` positionally: a keyword call inside a kernel is legal but makes
+# the generated code harder to read.
 @inline _ba_eval(v::NTuple{12, T}, y::T, rod::Bool) where {T} =
     ba_residual(v, y; rodrigues = rod)
 
 """
     _ba_valgrad(v, yres, rod) -> (value, gradient::NTuple{12})
 
-One observation's projected coordinate and its gradient in the 12 elemental
-variables, by one level of forward-mode AD over [`ba_residual`](@ref).
+One observation's projected coordinate and its gradient in the twelve
+elemental variables, by one level of forward-mode AD over
+[`ba_residual`](@ref).
 """
 @inline function _ba_valgrad(v::NTuple{12, T}, y::T, rod::Bool) where {T}
     DI = ForwardDiff.Dual{_BATagInner, T, 12}
@@ -114,45 +116,49 @@ end
 "The 78 lower-triangle slots of a 12x12 block, in (row, col) order."
 const _BA_LT = Tuple((a, b) for a in 1:12 for b in 1:a)
 
+# Tuple sum and dot by inlined recursion, NOT by a `sum` over a closure that
+# updates a captured accumulator: capturing a reassigned variable boxes it on
+# the heap, and a heap allocation inside a kernel is an `InvalidIRError`, not a
+# slowdown.
+@inline _ba_tsum(t::Tuple{Any}) = t[1]
+@inline _ba_tsum(t::Tuple) = t[1] + _ba_tsum(Base.tail(t))
+@inline _ba_dot(a::NTuple{N, T}, b::NTuple{N, T}) where {N, T} =
+    _ba_tsum(ntuple(k -> a[k] * b[k], Val(N)))
+
 # ---------------------------------------------------------------------------
-# Kernels. One observation per thread; `idx` is 12 x nobs so a thread's twelve
-# variable indices are contiguous in the first dimension.
+# Kernels. One observation per thread; `idx` is 12 x nobs, so a thread's twelve
+# variable indices are contiguous in the first dimension. Every `idx` entry is
+# in `1:length(x)` -- `_ba_check_indices` establishes that at build time.
 
 @kernel function _ba_cons_kernel!(
         cv, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(bc), rod)
     i = @index(Global)
-    @inbounds begin
-        v = ntuple(k -> x[idx[k, i]], Val(12))
-        cv[i] = w[i] * _ba_eval(v, yres[i], rod) - bc[i]
-    end
+    v = ntuple(k -> x[idx[k, i]], Val(12))
+    cv[i] = w[i] * _ba_eval(v, yres[i], rod) - bc[i]
 end
 
 @kernel function _ba_jac_kernel!(
         vals, @Const(x), @Const(idx), @Const(yres), @Const(w), rod)
     i = @index(Global)
-    @inbounds begin
-        v = ntuple(k -> x[idx[k, i]], Val(12))
-        _, g = _ba_valgrad(v, yres[i], rod)
-        wi = w[i]
-        base = (i - 1) * 12
-        ntuple(a -> (vals[base + a] = wi * g[a]; nothing), Val(12))
-    end
+    v = ntuple(k -> x[idx[k, i]], Val(12))
+    _, g = _ba_valgrad(v, yres[i], rod)
+    wi = w[i]
+    base = (i - 1) * 12
+    ntuple(a -> (vals[base + a] = wi * g[a]; nothing), Val(12))
 end
 
 # Constraint-block Hessian: row i contributes y[i] * w[i] * nabla^2 ba.
 @kernel function _ba_conhess_kernel!(
         vals, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(mult), rod)
     i = @index(Global)
-    @inbounds begin
-        v = ntuple(k -> x[idx[k, i]], Val(12))
-        _, _, H = _ba_valgradhess(v, yres[i], rod)
-        s = w[i] * mult[i]
-        base = (i - 1) * 78
-        ntuple(Val(78)) do p
-            a, b = _BA_LT[p]
-            vals[base + p] = s * H[a][b]
-            nothing
-        end
+    v = ntuple(k -> x[idx[k, i]], Val(12))
+    _, _, H = _ba_valgradhess(v, yres[i], rod)
+    s = w[i] * mult[i]
+    base = (i - 1) * 78
+    ntuple(Val(78)) do p
+        a, b = _BA_LT[p]
+        vals[base + p] = s * H[a][b]
+        nothing
     end
 end
 
@@ -161,18 +167,14 @@ end
         Hv, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(mult),
         @Const(vv), rod)
     i = @index(Global)
-    @inbounds begin
-        jj = ntuple(k -> idx[k, i], Val(12))
-        v = ntuple(k -> x[jj[k]], Val(12))
-        _, _, H = _ba_valgradhess(v, yres[i], rod)
-        s = w[i] * mult[i]
-        vl = ntuple(k -> vv[jj[k]], Val(12))
-        ntuple(Val(12)) do a
-            acc = zero(eltype(Hv))
-            ntuple(b -> (acc += H[a][b] * vl[b]; nothing), Val(12))
-            KernelAbstractions.@atomic Hv[jj[a]] += s * acc
-            nothing
-        end
+    jj = ntuple(k -> idx[k, i], Val(12))
+    v = ntuple(k -> x[jj[k]], Val(12))
+    _, _, H = _ba_valgradhess(v, yres[i], rod)
+    s = w[i] * mult[i]
+    vl = ntuple(k -> vv[jj[k]], Val(12))
+    ntuple(Val(12)) do a
+        KernelAbstractions.@atomic Hv[jj[a]] += s * _ba_dot(H[a], vl)
+        nothing
     end
 end
 
@@ -181,25 +183,21 @@ end
 @kernel function _ba_sq_kernel!(
         buf, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(bc), rod)
     i = @index(Global)
-    @inbounds begin
-        v = ntuple(k -> x[idx[k, i]], Val(12))
-        r = w[i] * _ba_eval(v, yres[i], rod) - bc[i]
-        buf[i] = r * r
-    end
+    v = ntuple(k -> x[idx[k, i]], Val(12))
+    r = w[i] * _ba_eval(v, yres[i], rod) - bc[i]
+    buf[i] = r * r
 end
 
 @kernel function _ba_objgrad_kernel!(
         g, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(bc), rod)
     i = @index(Global)
-    @inbounds begin
-        jj = ntuple(k -> idx[k, i], Val(12))
-        v = ntuple(k -> x[jj[k]], Val(12))
-        val, gr = _ba_valgrad(v, yres[i], rod)
-        wi = w[i]
-        r = wi * val - bc[i]
-        c = 2 * r * wi
-        ntuple(a -> (KernelAbstractions.@atomic g[jj[a]] += c * gr[a]; nothing), Val(12))
-    end
+    jj = ntuple(k -> idx[k, i], Val(12))
+    v = ntuple(k -> x[jj[k]], Val(12))
+    val, gr = _ba_valgrad(v, yres[i], rod)
+    wi = w[i]
+    r = wi * val - bc[i]
+    c = 2 * r * wi
+    ntuple(a -> (KernelAbstractions.@atomic g[jj[a]] += c * gr[a]; nothing), Val(12))
 end
 
 # Exact Hessian of sum_i r_i^2: 2 (J'J + sum_i r_i nabla^2 r_i), one 12x12
@@ -207,17 +205,15 @@ end
 @kernel function _ba_objhess_kernel!(
         vals, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(bc), rod)
     i = @index(Global)
-    @inbounds begin
-        v = ntuple(k -> x[idx[k, i]], Val(12))
-        val, gr, H = _ba_valgradhess(v, yres[i], rod)
-        wi = w[i]
-        r = wi * val - bc[i]
-        base = (i - 1) * 78
-        ntuple(Val(78)) do p
-            a, b = _BA_LT[p]
-            vals[base + p] = 2 * (wi * wi * gr[a] * gr[b] + r * wi * H[a][b])
-            nothing
-        end
+    v = ntuple(k -> x[idx[k, i]], Val(12))
+    val, gr, H = _ba_valgradhess(v, yres[i], rod)
+    wi = w[i]
+    r = wi * val - bc[i]
+    base = (i - 1) * 78
+    ntuple(Val(78)) do p
+        a, b = _BA_LT[p]
+        vals[base + p] = 2 * (wi * wi * gr[a] * gr[b] + r * wi * H[a][b])
+        nothing
     end
 end
 
@@ -225,21 +221,17 @@ end
         Hv, @Const(x), @Const(idx), @Const(yres), @Const(w), @Const(bc),
         @Const(vv), rod)
     i = @index(Global)
-    @inbounds begin
-        jj = ntuple(k -> idx[k, i], Val(12))
-        v = ntuple(k -> x[jj[k]], Val(12))
-        val, gr, H = _ba_valgradhess(v, yres[i], rod)
-        wi = w[i]
-        r = wi * val - bc[i]
-        vl = ntuple(k -> vv[jj[k]], Val(12))
-        gv = zero(eltype(Hv))
-        ntuple(a -> (gv += gr[a] * vl[a]; nothing), Val(12))
-        ntuple(Val(12)) do a
-            acc = 2 * wi * wi * gr[a] * gv
-            ntuple(b -> (acc += 2 * r * wi * H[a][b] * vl[b]; nothing), Val(12))
-            KernelAbstractions.@atomic Hv[jj[a]] += acc
-            nothing
-        end
+    jj = ntuple(k -> idx[k, i], Val(12))
+    v = ntuple(k -> x[jj[k]], Val(12))
+    val, gr, H = _ba_valgradhess(v, yres[i], rod)
+    wi = w[i]
+    r = wi * val - bc[i]
+    vl = ntuple(k -> vv[jj[k]], Val(12))
+    gv = _ba_dot(gr, vl)
+    ntuple(Val(12)) do a
+        KernelAbstractions.@atomic Hv[jj[a]] +=
+            2 * wi * (wi * gr[a] * gv + r * _ba_dot(H[a], vl))
+        nothing
     end
 end
 
@@ -262,19 +254,42 @@ struct BAKernelData{MI, VT}
     nobs::Int
 end
 
+"""
+    _ba_check_indices(obs, nvar)
+
+Check that every variable index of every observation lands in `1:nvar`.
+
+The kernels gather `x[idx[k, i]]` with no bounds check of their own, so this is
+what makes that legal. It runs once per build, O(nobs), against callbacks that
+cost milliseconds. On a device an out-of-range gather has no useful diagnosis:
+it reads whatever memory is there, or aborts the context, with nothing
+pointing back at the decode that produced the index.
+"""
+function _ba_check_indices(obs, nvar::Integer)
+    for (i, o) in pairs(obs)
+        for k in 1:12
+            j = o.idx[k]
+            1 <= j <= nvar || error(
+                "observation $i maps elemental variable $k to index $j, " *
+                "outside 1:$nvar")
+        end
+    end
+    return nothing
+end
+
 function _ba_kernel_data(obs, ::Type{T}, backend) where {T}
     nobs = length(obs)
     idxh = Matrix{Int32}(undef, 12, nobs)
     yresh = Vector{T}(undef, nobs)
     wh = Vector{T}(undef, nobs)
     bh = Vector{T}(undef, nobs)
-    @inbounds for (i, o) in enumerate(obs)
+    for (i, o) in pairs(obs)
         for k in 1:12
             idxh[k, i] = o.idx[k]
         end
-        yresh[i] = T(o.yres)
-        wh[i] = T(o.w)
-        bh[i] = T(o.b)
+        yresh[i] = o.yres
+        wh[i] = o.w
+        bh[i] = o.b
     end
     cv = v -> ExaModels.convert_array(v, backend)
     return BAKernelData(cv(idxh), cv(yresh), cv(wh), cv(bh), nobs)
@@ -302,9 +317,10 @@ become a `ScalarNonlinearOracle`.
 function ba_kernel_model(name::AbstractString; T = Float64, backend = nothing,
                          rodrigues::Bool = false)
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer)
-    obs, _rows, isobj = ba_observations(P)
+    obs, _rows, isobj = ba_observations(P, T)
     n = length(P.varnames)
     nobs = length(obs)
+    _ba_check_indices(obs, n)
     d = _ba_kernel_data(obs, T, backend)
     ka = backend === nothing ? KernelAbstractions.CPU() : backend
     rod = rodrigues
@@ -313,8 +329,8 @@ function ba_kernel_model(name::AbstractString; T = Float64, backend = nothing,
     c, _x = ExaModels.add_var(c, n; start = P.x0, lvar = P.lvar, uvar = P.uvar)
 
     # Hessian sparsity: the lower triangle of each observation's 12x12 block,
-    # in the same slot order the kernels write. Duplicate (i, j) across
-    # observations are intended -- ExaModels sums coordinate duplicates.
+    # in the slot order the kernels write. Duplicate (i, j) across observations
+    # are intended -- ExaModels sums coordinate duplicates.
     hr = Vector{Int}(undef, 78 * nobs)
     hc = Vector{Int}(undef, 78 * nobs)
     let p = 0
@@ -361,7 +377,7 @@ function ba_kernel_model(name::AbstractString; T = Float64, backend = nothing,
         jr = Vector{Int}(undef, 12 * nobs)
         jc = Vector{Int}(undef, 12 * nobs)
         let p = 0
-            for (i, o) in enumerate(obs), a in 1:12
+            for (i, o) in pairs(obs), a in 1:12
                 p += 1
                 jr[p], jc[p] = i, o.idx[a]
             end
