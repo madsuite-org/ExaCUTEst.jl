@@ -36,6 +36,17 @@ const BIG = 50_000
 # takes, this is about how a model computes. A constrained model's Hessian
 # comes from a `VectorNonlinearOracle`'s explicit `hess!` in one call and is
 # not affected.
+#
+# THIS LEAVES A REAL COVERAGE GAP, and it is a gap rather than a decision. For
+# the large objective-only problems -- BA-L16LS, BA-L21LS, BA-L49LS, BA-L52LS,
+# JIMACK -- nothing here exercises `hess_structure`/`hess_coord` at all, so
+# `hprod` carries the whole Hessian claim, and `hprod` is exactly the reading
+# that missed the BA duplicate-coordinate defect, because it never touches the
+# coordinate path. Sampling a few columns does not close it: the cost is
+# inside `hess_coord`, which has no per-column entry point. What closes it is
+# the port supplying an explicit `hess!` to its `ScalarNonlinearOracle` -- the
+# field exists as of ExaModels sif-integration 555b4ed9 -- after which
+# `hess_coord` is one call and the check is affordable at any size.
 const BIG_SCALAR_HESS = 2_000
 
 # --- where the reference is not the standard ---------------------------------
