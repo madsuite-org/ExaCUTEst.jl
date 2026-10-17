@@ -501,12 +501,28 @@ Needs no Fortran toolchain and no `sifdecoder`: the structure comes from
 `sif_decode(...; external = :defer)` and the driving data from the
 `BLOCK DATA SARCOM` appended to the same file.
 
-`T = Float32` builds and evaluates: `cons` then agrees with the Float64 model
-to 5e-6 relative, and [`saro_stage_values`](@ref) itself also evaluates in
-BigFloat. Building an oracle-backed model at any `T` requires an ExaModels whose
-`_build_with_oracle` types its work buffers by element type; an older revision
-allocated them as `zeros(n)` against a `VT`-typed field and failed to construct
-`ExaModelWithOracle` for every `T` but `Float64`.
+`T != Float64` builds, and `cons` evaluates (agreeing with the Float64 model
+to 5e-6 in Float32), but `jac` and `hess` do NOT, for two independent reasons
+that are worth separating because fixing either alone leaves the other.
+
+ExaModels allocates the oracle cache's callback buffers as untyped `zeros(n)`,
+so the callbacks here see `E = eltype(vals) === Float64` and convert the
+variables to `E` while `stagedata` stays in `T`. `saro_rk4` ties the control's
+type to the state's, so the mixed pair has no method:
+`saro_stage_jac(::NTuple{11,Float32}, ::NTuple{11,Float32}, ::NTuple{11,Float64})`.
+Typing those buffers upstream removes it; relaxing the control's type parameter
+here would harden the port against it.
+
+In Float32 the Jacobian and Hessian are then NaN at every stage. The second
+RK4 call zeroes the collector terms, so `saro_rhs` forms
+`x6 + v18/(1.16111111111111e-27 + 1161.11 v19)` with `v18 = v19 = 0`, and
+ForwardDiff's quotient rule squares the denominator: `Float32(1.161e-27)^2`
+underflows to zero and gives `0/0`, where Float64 gives a normal 1.35e-54. The
+regulariser is the Fortran's constant and stays; a Float32-safe port needs the
+division restructured so it is never squared.
+
+[`saro_stage_values`](@ref) itself is generic and evaluates in Float32 and
+BigFloat whenever the data and the values share a type.
 """
 function saro_oracle_model(name::AbstractString; T = Float64, backend = nothing)
     # Refuse a backend rather than accept and ignore it: that would report the

@@ -24,8 +24,19 @@ const LOCK = "/tmp/cutest-decode.pid"            # host-local: CUTEst compiles
 const TSV = joinpath(@__DIR__, "..", "runs", "native_verify.tsv")
 
 # Problems too large to assemble a Hessian for; `hprod` carries the claim
-# there, in both directions of every random test direction.
+# there, over every random test direction.
 const BIG = 50_000
+
+# An objective-only model's Hessian comes from a `ScalarNonlinearOracle`, and
+# ExaModels reconstructs that from one `hvp!` per COLUMN, so assembling it
+# costs `nvar` passes over the whole objective rather than one. At 34134
+# variables over 36455 observations that is upward of 1e9 residual
+# evaluations, which is why the assembled-Hessian checks need a second bound
+# that `BIG` cannot express: `BIG` is about how much memory a comparison
+# takes, this is about how a model computes. A constrained model's Hessian
+# comes from a `VectorNonlinearOracle`'s explicit `hess!` in one call and is
+# not affected.
+const BIG_SCALAR_HESS = 2_000
 
 # --- where the reference is not the standard ---------------------------------
 
@@ -283,7 +294,7 @@ function verify(name; ndir = 3, seed = 20261016)
                 # Assembled Hessian: exercises hess_structure/hess_coord, which
                 # hprod does not touch, and so is where a mis-declared sparsity
                 # pattern or a non-accumulating write shows up.
-                if nv <= BIG
+                if nv <= BIG && (nc > 0 || nv <= BIG_SCALAR_HESS)
                     Ho = hsparse(ours, xo, yo)
                     # `hess_coord!` fills one slot per declared nonzero. Where
                     # the declared pattern repeats a (row, col) pair -- element

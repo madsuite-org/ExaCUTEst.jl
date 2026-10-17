@@ -92,34 +92,41 @@ end
 const BA_EVARS = (:RX, :RY, :RZ, :X, :Y, :Z, :TX, :TY, :TZ, :KA, :KB, :F)
 
 "One observation: where its 12 variables live, which component, and its row."
-struct BAObs
+# Parametric in the model's element type: with these three fields fixed at
+# Float64, `ba_row` returns a Float64 whatever `x` is, and the objective's
+# accumulator promotes after its first term -- so a `T = Float32` model sums
+# in Float64 and rounds once at the end. The result is numerically no worse
+# (measured better than Float64's own error against a BigFloat sum), but it is
+# a type instability in the hot loop and the arithmetic is not the precision
+# the model was asked for.
+struct BAObs{T}
     idx::NTuple{12,Int}
-    yres::Float64
-    w::Float64
-    b::Float64
+    yres::T
+    w::T
+    b::T
 end
 
 """
-    ba_observations(P) -> (Vector{BAObs}, rows)
+    ba_observations(P, T = Float64) -> (Vector{BAObs{T}}, rows, isobj)
 
 Read the observations out of a `sif_decode(...; external = :defer)` problem:
 each row holds exactly one element of type `E`, whose twelve elemental
 variables map to problem variables, with `YRES` selecting the component and
 the observed pixel arriving as the row's group constant.
 """
-function ba_observations(P)
+function ba_observations(P, ::Type{T} = Float64) where {T}
     rows = [g for g in P.grouporder if P.groups[g].kind != 'N']
     isobj = isempty(rows)
     isobj && (rows = copy(P.grouporder))
-    obs = Vector{BAObs}(undef, length(rows))
+    obs = Vector{BAObs{T}}(undef, length(rows))
     for (i, g) in enumerate(rows)
         grp = P.groups[g]
         length(grp.elems) == 1 ||
             error("$g holds $(length(grp.elems)) elements; expected exactly 1")
         en, w = grp.elems[1]
         e = P.elements[en]
-        obs[i] = BAObs(ntuple(k -> e.varmap[BA_EVARS[k]], 12),
-                       e.parvals[:YRES], w, grp.constant)
+        obs[i] = BAObs{T}(ntuple(k -> e.varmap[BA_EVARS[k]], 12),
+                          e.parvals[:YRES], w, grp.constant)
     end
     return obs, rows, isobj
 end
@@ -166,17 +173,16 @@ compiling it.
 """
 function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
                          rodrigues::Bool = false)
-    # The oracle callbacks are CPU Julia for now. ba_residual itself is
-    # allocation- and branch-free, so a GPU path is a matter of calling it
-    # from a kernel (roadmap step 4) rather than of rewriting it -- but that
-    # is not wired yet, and silently ignoring `backend` would misreport the
-    # model as being on the device.
+    # The oracle callbacks run on the CPU, so a backend is refused rather
+    # than ignored: accepting one would misreport the model as being on the
+    # device. `ba_residual` itself is allocation- and branch-free, so a device
+    # path is a matter of calling it from a kernel, not of rewriting it.
     backend === nothing || error(
         "ba_oracle_model does not take a backend yet: the port's callbacks " *
         "run on the CPU. ba_residual is GPU-safe, so this is step 4 of the " *
         "roadmap, not a limitation of the port.")
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer)
-    obs, rows, isobj = ba_observations(P)
+    obs, rows, isobj = ba_observations(P, T)
     n = length(P.varnames)
     nobs = length(obs)
 

@@ -73,15 +73,23 @@
 # callbacks: 6.0e-16, i.e. rounding. N <= 6 here, so the full Hessian is
 # materializable and no wrong row can hide orthogonal to the random hvp probes
 # -- a gap that necessarily remains for BA-L*.
-# Script: ~/git/scratch/hs88_92_verify.jl, results hs88_92_verify.tsv.
+# `test/native_verify.jl` re-runs the comparison.
 #
-# NOT MATCHED, and upstream: the model cannot be built with T != Float64.
-# ExaModels' _build_with_oracle allocates `work_ncon`/`work_nvar` as `zeros(n)`
-# (Float64) while `ExaModelWithOracle` declares them `::VT`, so NO
-# oracle-backed ExaModel builds in Float32 -- BA-L* included. The port itself
-# is fine in Float32 and BigFloat (checked directly: Float64 agrees with
-# BigFloat to 3e-16, Float32 to ~4e-07), so this is a one-line fix in
-# ExaModels, not a limitation here.
+# PRECISION, and the one part of it that is upstream. These models build and
+# evaluate at any `T`: Float32 and BigFloat both return their own element type
+# from every callback, and the port's arithmetic is generic (Float64 agrees
+# with BigFloat to 3e-16 and Float32 to ~4e-7 on the element function itself).
+# What a non-Float64 oracle model does NOT get is non-Float64 DERIVATIVE
+# PRECISION. ExaModels allocates the oracle cache's callback buffers as
+# untyped `zeros(n)`, i.e. Float64, and those fields are declared
+# `VF <: AbstractVector` rather than `::VT`, so the model builds and then
+# hands the callback a Float64 output array whose contents are scattered into
+# the model's own typed arrays. The reading that shows it: in a BigFloat
+# model every entry of `grad` is exactly representable as a Float64
+# (fraction 1.000 for HS88 and HS92, against 0.818 for VANDANMSLS, which is
+# not oracle-backed), while `obj` -- which bypasses the buffers -- is genuine
+# BigFloat. So a BigFloat oracle model arbitrates Float64 to about one ulp and
+# no finer.
 
 """
     HS88_MU :: NTuple{30,Float64}

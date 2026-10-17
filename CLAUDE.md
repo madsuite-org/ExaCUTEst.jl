@@ -115,19 +115,45 @@ port.
 
 ## The native tier (src/native/)
 
-A hand-written model lives here only if BOTH hold: the SIF uses external
-Fortran (so the decoder refuses it), AND the Fortran computes something Julia
-expresses exactly. Today that is `HS68` and `HS69`, whose Fortran is just the
-normal CDF. They are preferred over the oracle tier, so they accept a
-`backend`.
+A hand-written model lives here for every problem the decoder refuses, i.e.
+every SIF that appends external Fortran. All 34 of them are here, so
+`oracle_tier_problems()` is empty and nothing in the collection evaluates
+through compiled Fortran.
 
-Adding one without validating it against a `CUTEstModel` is worse than
-leaving it on the oracle tier, because a hand-written model is wrong
-*silently*. The legacy 0.1 port offered three candidates and one failed:
-`HS67` swaps the Fortran's fixed-point iteration for closed-form roots and is
-off in the fourth digit. It is not a rounding artifact -- the Fortran's
-derivatives are those of the finite iteration, not of the exact fixed point.
-Do not resurrect it without re-deriving the iteration itself.
+THE SHAPE OF A PORT FOLLOWS WHAT THE FORTRAN DEPENDS ON, and the choice is
+not a judgement call per problem:
+
+- Depends only on element PARAMETERS: evaluate it in Julia at build time and
+  constant-fold the result into the group's `lin`. The model is then an
+  ordinary SIMD ExaModel and accepts a `backend` (`HS68`/`HS69`, whose Fortran
+  is the normal CDF; `VANDANIUM`, whose `BSPLINE` reads only parameters).
+- Depends on the VARIABLES: a generic Julia function behind an ExaModels
+  oracle, with derivatives from ForwardDiff. NOT an ExaModels expression --
+  ExaModels nests a type parameter per operation, so a ~30-operation chain
+  does not finish compiling.
+
+Never port the Fortran's hand-coded `G`/`H` arrays. Derivatives come from AD.
+Porting them is what made the legacy `HS67` wrong in the fourth digit: it
+swapped the Fortran's fixed-point iteration for closed-form roots, so its
+derivatives were those of the exact fixed point rather than of the finite
+iteration the problem actually defines.
+
+VALIDATE THROUGH `ExaCUTEstModel`, NOT THROUGH THE PORT'S OWN CONSTRUCTOR.
+`test/native_verify.jl` does this for all 34 and is the comparison that
+belongs to the package: a port can be correct and still be reached by the
+wrong name, with the wrong default, or not at all. Writing it found two
+defects that every per-port script had passed over. `HS68`/`HS69` had been
+indexed in the REFERENCE's variable order rather than the SIF's for as long
+as they existed, so `sif_variable_names` named the wrong variable for exactly
+those two -- invisible at `x0`, where all four variables are 1.0, and
+invisible in the objective, which does not involve `X2`. And the `BA-L*LS`
+models assembled a Hessian 92% wrong while `hprod` was exact, because
+`hprod` never reads the coordinate path.
+
+`element_hessian`, `ref_param_rounding`, `single` and `fortran_literals`
+select between READINGS of the Fortran, so they are part of the model's
+identity. `ExaCUTEstModel` forwards them; an unknown keyword raises a
+MethodError naming it rather than being ignored.
 
 Never put a DECODABLE problem here. The decoder is validated over the whole
 collection; a hand-written duplicate would just be a second thing to keep
@@ -257,3 +283,29 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 Needs gfortran, since the agreement layer builds real `CUTEstModel`s. The
 full-collection validation is not here — it lives in ExaModelsSIF
 (`test/valsweep.jl`, 1548/1548).
+
+`test/native_verify.jl` compares every native model against the Fortran it
+replaces, through `ExaCUTEstModel`:
+
+```
+julia --project=. test/native_verify.jl            # all of native_problems()
+julia --project=. test/native_verify.jl CAR2 SARO  # or a subset
+```
+
+Rows append to `runs/native_verify.tsv`. Its tolerance table carries the
+mechanism for every entry above 1e-12, and where a derivative is compared
+against something other than the reference's own, the mode records why the
+reference cannot serve: five problems in the collection -- BLEACHNG, CAR2,
+ORBIT2, SARO, SAROMM, all five external-Fortran -- carry a `1` in the fourth
+classification field, meaning the SIF supplies first derivatives only, and
+three more (HS67, HS85, BLEACHNG) have analytic first derivatives that
+contradict their own values. Those are adjudicated against a central
+difference of the lowest derivative that is trustworthy. No tolerance is
+loosened to cover a disagreement.
+
+Needs ExaModels `sif-integration` at 555b4ed9 or later: earlier revisions have
+no `hess!` on `ScalarNonlinearOracle` (so a repeated Hessian pattern assembles
+wrong), allocate the oracle cache buffers as Float64 regardless of the model's
+element type (so a non-Float64 oracle model's derivatives carry only Float64
+precision), and skip scalar oracles in the KernelAbstractions overrides (so an
+oracle objective's Hessian is exactly zero on a GPU backend).
