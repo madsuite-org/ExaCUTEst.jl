@@ -90,7 +90,8 @@ function vandanium_bspline(x0::T, k::T, h::T, x::T; single_xx::Bool = true) wher
 end
 
 """
-    vandanium_model(name; T = Float64, backend = nothing, single_xx = true)
+    vandanium_model(name; T = Float64, backend = nothing, prod = :auto,
+                    single_xx = true)
 
 Build VANDANIUMS / VANDANMSLS as a genuine ExaModel -- not an oracle.
 
@@ -114,7 +115,8 @@ The default `false` uses the SIF's exact values; see the header for the
 measurement.
 """
 function vandanium_model(name::AbstractString; T = Float64, backend = nothing,
-                         single_xx::Bool = true, ref_param_rounding::Bool = false)
+                         prod = :auto, single_xx::Bool = true,
+                         ref_param_rounding::Bool = false)
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer)
     haskey(P.external_types, "BSPLINE") ||
         error("$name: expected a deferred BSPLINE element type, found " *
@@ -139,5 +141,5 @@ function vandanium_model(name::AbstractString; T = Float64, backend = nothing,
     folded > 0 || error("$name: no elements folded; the SIF structure changed")
     # nothing external remains, so the decoder can build it unaided
     delete!(P.external_types, "BSPLINE")
-    return ExaModelsSIF.build_exa(P; T, backend)
+    return ExaModelsSIF.build_exa(P; T, backend, prod)
 end

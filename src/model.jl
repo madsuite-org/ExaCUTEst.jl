@@ -33,6 +33,10 @@ as an `ExaModel`. `name` may also be a path to a `.SIF` file.
   have verified native models -- see [`native_problems`](@ref) -- leaving 32
   on the oracle tier). `:oracle` (default) wraps the compiled Fortran as
   ExaModels oracles; `:error` raises `ExaModelsSIF.ExternalFortranError`.
+- `prod`: whether a decoded or native model carries the product helper that
+  `hprod!`, `jprod_nln!` and `jtprod_nln!` dispatch on under a `backend`.
+  `:auto` (the builders' default) builds it wherever the model's structure
+  admits one; see `ExaModelsSIF.prodflag`.
 - `kwargs...`: forwarded to `ExaModelsSIF.sif_decode`.
 
 # Examples

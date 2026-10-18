@@ -25,7 +25,7 @@
 # nonlinear variables first and so hands back X2 at position 1; comparing the
 # two models therefore requires the name permutation, and indexing one model's
 # vector with the other's positions silently reads the wrong variable.
-function _hs68_69_model(::Type{T}, A, B, NN; backend, kwargs...) where {T}
+function _hs68_69_model(::Type{T}, A, B, NN; backend, prod = :auto, kwargs...) where {T}
     AN = T(A) * T(NN)
     DROOTN = sqrt(T(NN))
     sq2 = sqrt(T(2))
@@ -53,23 +53,23 @@ function _hs68_69_model(::Type{T}, A, B, NN; backend, kwargs...) where {T}
         X4 - phi(DROOTN - X2) - phi(-DROOTN - X2)
     end)
 
-    return ExaModels.ExaModel(c; kwargs...)
+    return ExaModels.ExaModel(c; prod = ExaModelsSIF.prodflag(prod, c), kwargs...)
 end
 
 """
-    hs68_model(; T = Float64, backend = nothing, kwargs...) -> ExaModel
+    hs68_model(; T = Float64, backend = nothing, prod = :auto, kwargs...) -> ExaModel
 
 HS68 as a native ExaModel: its external Fortran is the standard normal CDF,
 which `erf` supplies exactly, so no oracle is needed and the model accepts a
 `backend`.
 """
-hs68_model(; T = Float64, backend = nothing, kwargs...) =
-    _hs68_69_model(T, 1e-4, 1.0, 24.0; backend, kwargs...)
+hs68_model(; T = Float64, backend = nothing, prod = :auto, kwargs...) =
+    _hs68_69_model(T, 1e-4, 1.0, 24.0; backend, prod, kwargs...)
 
 """
-    hs69_model(; T = Float64, backend = nothing, kwargs...) -> ExaModel
+    hs69_model(; T = Float64, backend = nothing, prod = :auto, kwargs...) -> ExaModel
 
 HS69, the same model as [`hs68_model`](@ref) with A = 0.1, B = 1000, NN = 4.
 """
-hs69_model(; T = Float64, backend = nothing, kwargs...) =
-    _hs68_69_model(T, 0.1, 1000.0, 4.0; backend, kwargs...)
+hs69_model(; T = Float64, backend = nothing, prod = :auto, kwargs...) =
+    _hs68_69_model(T, 0.1, 1000.0, 4.0; backend, prod, kwargs...)
