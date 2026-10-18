@@ -113,9 +113,11 @@
 # SIMD part through host loops over the device arrays. `COLLOC_gpu.jl` and
 # `src/native/HS88_92.jl` carry the same note for the same reason.
 #
-# FLOAT32 IS NON-FINITE HERE TOO, by construction and not as a device
-# artifact: see [`saro_kernel_model`](@ref) and the docstring of
-# [`saro_oracle_model`](@ref) for the mechanism.
+# FLOAT32 DERIVATIVES ARE FINITE because `saro_rhs` widens the one quotient
+# whose denominator is the regulariser alone (`_saro_quot` in SARO.jl); the
+# kernels inherit it. For Float64 the widening folds away at compile time, so
+# the Float64 kernels' code, registers and spill are those of the plain
+# division.
 #
 # ONE BUILDER FOR BOTH BACKENDS. `backend = nothing` runs the same kernels on
 # KernelAbstractions' CPU backend. A CPU-versus-GPU comparison therefore tests
@@ -609,18 +611,11 @@ reproducible across backends and `T` may be a non-bits type -- on
 objective is a SIMD expression and the constraints an oracle, and only the
 prodhelper that `prod = true` builds gives that mixture a device `hprod` path.
 
-In Float32 `cons` evaluates but `jac`, `hess` and `hprod` are non-finite at
-every stage, on every backend, for the reason
-[`saro_oracle_model`](@ref) records: the second RK4 call zeroes the collector
-terms, so `saro_rhs` forms
-`x6 + v18/(1.16111111111111e-27 + 1161.11 v19)` with `v18 = v19 = 0`, and
-ForwardDiff's quotient rule squares the denominator, where
-`Float32(1.161e-27)^2` underflows to zero and gives `0/0`. The regulariser is
-the Fortran's own constant and stays. This is a property of the ported
-function and not of the kernels or the hardware: the host backend, the device
-and [`saro_oracle_model`](@ref) all produce non-finite values in exactly the
-same positions -- 0 of `cons`, 28105 of SARO's 48180 Jacobian entries, all
-24090 Hessian entries and 4015 of 4754 `hprod` components.
+In Float32 every callback is finite on every backend, for the reason
+[`saro_oracle_model`](@ref) records: the one quotient in `saro_rhs` whose
+denominator is the regulariser alone is differentiated over Float64. On the
+host backend the Float32 `cons`, `jac` and `hess` are bit-identical to
+[`saro_oracle_model`](@ref)'s.
 
 !!! note "What the device buys"
     Measured per call on shin-compute-001 (Quadro GV100), one Julia thread,

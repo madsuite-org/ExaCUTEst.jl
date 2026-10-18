@@ -142,13 +142,13 @@ precisions) to make sure we have correct impl -> done!"
    HIELOW, PARKCH and STRATEC the work is worth it anyway -- their variable
    count is tiny but the reduction runs over an estimation sample of tens of
    thousands of records.
-5. **Full verification again**: CPU, GPU, and multiple precisions. Two
-   failures are already known and are properties of the ports rather than
-   bugs to fix blindly: SARO and SAROMM have non-finite Float32 derivatives
-   because `Float32(1.16111111111111e-27)^2` underflows to zero inside
-   ForwardDiff's quotient rule where Float64 gives a normal 1.35e-54, and the
-   regulariser is the Fortran's own constant. A Float32-safe port needs the
-   division restructured so it is never squared.
+5. **Full verification again**: CPU, GPU, and multiple precisions.
+   SARO and SAROMM divide by the Fortran's regulariser 1.16111111111111e-27
+   alone in every stage, and ForwardDiff's quotient rule squares it, which
+   underflows to zero in Float32 (1.35e-54 is normal in Float64). `_saro_quot`
+   (`src/native/SARO.jl`) takes that one quotient over Float64 when the duals
+   are over Float32, so Float32 derivatives are finite while Float64 takes the
+   plain division and stays bit-exact against the Fortran.
 
 Until step 2 lands, GPU verification stays out of scope (see below) and
 solver testing is explicitly NOT wanted: "solve is not a too much concern

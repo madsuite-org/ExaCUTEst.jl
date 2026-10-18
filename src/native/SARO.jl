@@ -230,6 +230,38 @@ end
 # ---------------------------------------------------------------------------
 # The port proper: SREQ -> SRK4 -> SRFG, as generic Julia functions
 
+_saro_wide(::Type{T}) where {T} = T
+_saro_wide(::Type{Float32}) = Float64
+_saro_wide(::Type{ForwardDiff.Dual{G,V,N}}) where {G,V,N} =
+    ForwardDiff.Dual{G,_saro_wide(V),N}
+
+"""
+    _saro_quot(a, b)
+
+`a / b`, except that a quotient of `ForwardDiff.Dual`s over Float32 is taken
+over Float64 and rounded back.
+
+This is the one division in [`saro_rhs`](@ref) whose denominator can be the
+regulariser `1.16111111111111e-27` alone: in the second sample period of every
+stage the collector terms are zero, so numerator and denominator are duals of
+zero value and zero partials plus that constant. ForwardDiff's quotient rule
+forms `value(a) / value(b)^2`; the square is 1.35e-54, normal in Float64 but
+zero in Float32, which turns the partials into `0/0`. Over Float64 they are 0.
+
+The VALUE is unchanged by the detour: Float64 carries more than twice
+Float32's precision plus two bits, so rounding the Float64 quotient of two
+Float32 numbers to Float32 gives the correctly rounded Float32 quotient. Every
+other type, Float64 and BigFloat included, takes `a / b` itself; the branch is
+on types and folds away at compile time, so their results and generated code
+are those of the plain division.
+"""
+@inline _saro_quot(a, b) = a / b
+@inline function _saro_quot(a::D, b::D) where {D<:ForwardDiff.Dual}
+    W = _saro_wide(D)
+    W === D && return a / b
+    return convert(D, convert(W, a) / convert(W, b))
+end
+
 """
     saro_rhs(d, X, p) -> (DF, w)
 
@@ -265,7 +297,7 @@ between a 10 s and a multi-minute Hessian compile. See the header.
     v16 = S(0.000277777777777778) * v14
     v43 = S(3600.0) * v16                             # == V61 == V78 == V95 == V112 == V129
     v18 = h0 + (h1 + (h2 + h3 * x6) * x6) * x6
-    v46 = x6 + v18 / (S(1.16111111111111e-27) + S(1161.11111111111) * v19)
+    v46 = x6 + _saro_quot(v18, S(1.16111111111111e-27) + S(1161.11111111111) * v19)
     v8 = S(0.000277777777777778) * v6
     v48 = S(3600.0) * v8                              # == V65 == V82 == V99 == V116 == V133
 
@@ -512,27 +544,19 @@ drives the same [`saro_stage_values`](@ref) from KernelAbstractions kernels and
 declares the same Jacobian and Hessian patterns; its `cons`, `jac` and `hess`
 are bit-identical to this builder's in Float64 and in BigFloat.
 
-`T != Float64` builds, and `cons` evaluates (agreeing with the Float64 model
-to 5e-6 in Float32, and finite in every precision), but in Float32 `jac` and
-`hess` do not.
+`T != Float64` builds and evaluates every callback. In Float32 all of them
+are finite: the second RK4 call zeroes the collector terms, so `saro_rhs`
+divides by the regulariser `1.16111111111111e-27` alone in every stage, and
+that one quotient is differentiated over Float64 because ForwardDiff's quotient
+rule squares the denominator, which underflows to zero in Float32 -- see
+`_saro_quot`. Float64 and BigFloat take the plain division.
 
-In Float32 the Jacobian and Hessian are non-finite at every stage. The second
-RK4 call zeroes the collector terms, so `saro_rhs` forms
-`x6 + v18/(1.16111111111111e-27 + 1161.11 v19)` with `v18 = v19 = 0`, and
-ForwardDiff's quotient rule squares the denominator: `Float32(1.161e-27)^2`
-underflows to zero and gives `0/0`, where Float64 gives a normal 1.35e-54. The
-regulariser is the Fortran's constant and stays; a Float32-safe port needs the
-division restructured so it is never squared.
-
-Measured in both populations, which agree on the same 28105 entries and so tie
-them to one defect: `saro_stage_jac` called directly with uniform Float32
-arguments is non-finite in 28105 of 44165 entries, at 365 of 365 stages, and 0
-of 44165 in Float64; through the model, `jac_coord` is non-finite in 28105 of
-SARO's 48180 entries and 28105 of SAROMM's 50370, and `hess_coord` in all
-24090 of both. Every stage qualifies because `saro_stage_data` zeroes `db`'s
-positions 4:11 for every stage, not just one. The two proportions differ only
-because the coordinate array interleaves stage blocks with the 4015 linear
-entries, which stay finite.
+Against a 256-bit BigFloat evaluation at `x0` and at a perturbed point, the
+Float32 model's normwise relative error is ~1e-6 in `cons`, 2e-7 .. 4e-7 in
+`jac`, and 8e-7 .. 1.2e-4 in `hess` and `hprod`; Float64's is 1e-16 .. 4e-13
+on the same callbacks. The larger second-derivative errors are at the
+perturbed point and track the conditioning there, which raises Float64's error
+by a similar factor.
 
 [`saro_stage_values`](@ref) itself is generic and evaluates in Float32 and
 BigFloat whenever the data and the values share a type.

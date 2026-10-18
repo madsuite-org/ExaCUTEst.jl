@@ -46,13 +46,13 @@
 #     survived the RAYBENDS and BA families' first verifications -- 96% and 92%
 #     wrong assembled, exact in `hprod`.
 #
-# A FOURTH SECTION, `precisions`, records what the element types do, because
-# for these two problems one of them is a known defect of the ported function
-# rather than of the kernels: in Float32 the Jacobian and Hessian are
-# non-finite at every stage (`src/native/SARO.jl` records the mechanism and the
-# counts). The section asserts that the kernel builder reproduces the host
-# port's non-finite COUNT rather than that it is finite, and that BigFloat --
-# which is how a Float64 result gets arbitrated -- agrees with the port.
+# A FOURTH SECTION, `precisions`, checks the other element types on the host.
+# In Float32 every stage divides by the Fortran's regulariser 1.161e-27 alone,
+# whose square underflows inside ForwardDiff's quotient rule unless that one
+# quotient is widened (`_saro_quot` in `src/native/SARO.jl`), so the section
+# asserts that the Float32 Jacobian and Hessian are finite, that the kernel
+# builder matches the port, and that both are near the Float64 port. BigFloat
+# -- which is how a Float64 result gets arbitrated -- must agree with the port.
 #
 # Guarding against a vacuous pass: every check records the magnitude of what it
 # compared, and a check whose two sides are both identically zero, or has an
@@ -142,6 +142,15 @@ tol_dev(cb, pt) =
 # once through the coordinate path and once through the matrix-free one, which
 # is `TOL_HPROD`'s mechanism again, so it carries `TOL_HPROD`'s bound.
 const TOL_SELF = TOL_HPROD
+
+# Float32 against the Float64 port, normwise. Measured at `x0` with this
+# script's multipliers: 2.3e-7 in `jac`, 1.1e-6 in `cons` and 4.3e-6 in `hess`
+# -- Float32's 6e-8 unit roundoff amplified through two RK4 steps per stage;
+# against a 256-bit BigFloat evaluation the Float64 port is nearer exact by
+# eight orders or more, so this is the Float32 error. The bound leaves a margin
+# of 20 over the Hessian; a Float32 derivative carrying a real defect is off by
+# far more.
+const TOL_F32 = 1e-4
 
 # --- backend ----------------------------------------------------------------
 
@@ -339,20 +348,21 @@ function precisions(name)
     n, m = k32.meta.nvar, k32.meta.ncon
     x32 = Array(k32.meta.x0)
     y32 = Float32.(randn(m))
-    # `cons` IS finite in Float32 and must agree with the port; the derivatives
-    # are not, and what is asserted of them is that the kernel builder produces
-    # the SAME non-finite entries as the port, since a different count would
-    # mean a second defect on top of the known one.
-    ck, cp = cons(k32, x32), cons(p32, x32)
-    push!(checks, Check("cons", "x0", "f32 host/port", reldiff(ck, cp)..., 1e-7))
-    push!(checks, exact("cons_finite", "x0", "f32 kernel",
-                        count(!isfinite, Array(ck)) != 0))
-    for (cb, a, b) in (("jac", jac_coord(k32, x32), jac_coord(p32, x32)),
-                       ("hess", hess_coord(k32, x32, y32),
-                        hess_coord(p32, x32, y32)))
+    # Every Float32 callback must be finite in both builders, agree between
+    # them, and agree with the Float64 port to TOL_F32 -- the comparison that
+    # keeps a finite but wrong derivative from passing.
+    p64 = PORT[name]()
+    x64, y64 = Float64.(x32), Float64.(y32)
+    for (cb, a, b, r) in (("cons", cons(k32, x32), cons(p32, x32), cons(p64, x64)),
+                          ("jac", jac_coord(k32, x32), jac_coord(p32, x32),
+                           jac_coord(p64, x64)),
+                          ("hess", hess_coord(k32, x32, y32),
+                           hess_coord(p32, x32, y32), hess_coord(p64, x64, y64)))
         na = count(!isfinite, Array(a))
         nb = count(!isfinite, Array(b))
-        push!(checks, exact("$(cb)_nonfinite", "x0", "f32 host/port", na != nb))
+        push!(checks, exact("$(cb)_nonfinite", "x0", "f32 kernel+port", na + nb != 0))
+        push!(checks, Check(cb, "x0", "f32 host/port", reldiff(a, b)..., 1e-7))
+        push!(checks, Check(cb, "x0", "f32 host/f64 port", reldiff(a, r)..., TOL_F32))
         @printf("  %-7s Float32 non-finite: kernel %d, port %d, of %d\n",
                 cb, na, nb, length(Array(a)))
     end
