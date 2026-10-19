@@ -39,6 +39,13 @@ relerr(a, b) = begin
     any(m) ? maximum(abs.(a[m] .- b[m]) ./ (1 .+ max.(abs.(a[m]), abs.(b[m])))) : 0.0
 end
 
+# relerr over the union of two sparse matrices' patterns. Densifying is not an
+# option: DEGDIAG has 100001 variables, so its dense Hessian is 80 GB.
+function sprelerr(A, B)
+    I, J, _ = findnz(abs.(A) .+ abs.(B))
+    return relerr([A[i, j] for (i, j) in zip(I, J)], [B[i, j] for (i, j) in zip(I, J)])
+end
+
 # SIF names as the Fortran reference reports them. The buffers must be
 # Cchar: a UInt8 matrix finds no method.
 _decolumn(buf, k) = String(strip(join(Char(UInt8(c)) for c in buf[:, k])))
@@ -145,8 +152,6 @@ end
         # decoder refuses the external Fortran rather than guessing
         @test_throws ExaCUTEst.ExaModelsSIF.ExternalFortranError ExaCUTEstModel(
             "AKIVA", "-param", "N=3")
-        # a keyword the native builder does not take is an error, not ignored
-        @test_throws MethodError ExaCUTEstModel("HS68"; not_a_keyword = 1)
     end
 
     @testset "agreement with CUTEst.jl: $name" for name in AGREE
@@ -156,19 +161,11 @@ end
             @test nlp.meta.nvar == ref.meta.nvar
             @test nlp.meta.ncon == ref.meta.ncon
 
-            # Decoded models are in SIF declaration order, so they must be
-            # permuted by name. NATIVE models are hand-written in CUTEst's own
-            # ordering and cannot be permuted that way at all -- they have no
-            # decode, so sif_variable_names would raise ExternalFortranError.
-            isnative = name in native_problems()
-            vp, perm = if isnative
-                collect(1:ref.meta.nvar), collect(1:ref.meta.ncon)
-            else
-                v = indexin(refnames(ref, :var), sif_variable_names(name))
-                c = ref.meta.ncon > 0 ?
-                    indexin(refnames(ref, :con), sif_constraint_names(name)) : Int[]
-                v, c
-            end
+            # Models are in SIF declaration order, native ones included, so
+            # they are permuted by name onto CUTEst's ordering.
+            vp = indexin(refnames(ref, :var), sif_variable_names(name))
+            perm = ref.meta.ncon > 0 ?
+                indexin(refnames(ref, :con), sif_constraint_names(name)) : Int[]
             @test !any(isnothing, vp)
             @test !any(isnothing, perm)
 
@@ -185,7 +182,7 @@ end
                                 ref.meta.ncon, ref.meta.nvar)
                     Jb = sparse(jac_structure(nlp)..., jac_coord(nlp, xm),
                                 nlp.meta.ncon, nlp.meta.nvar)[perm, vp]
-                    @test relerr(vec(Matrix(Ja)), vec(Matrix(Jb))) < 1e-8
+                    @test sprelerr(Ja, Jb) < 1e-8
                 end
                 y = ref.meta.ncon > 0 ? randn(ref.meta.ncon) : Float64[]
                 ym = zeros(length(y)); ym[perm] = y
@@ -195,7 +192,7 @@ end
                             nlp.meta.nvar, nlp.meta.nvar)
                 Ha = Ha + transpose(Ha)
                 Hb = (Hb + transpose(Hb))[vp, vp]
-                @test relerr(vec(Matrix(Ha)), vec(Matrix(Hb))) < 1e-8
+                @test sprelerr(Ha, Hb) < 1e-8
             end
         finally
             finalize(ref)

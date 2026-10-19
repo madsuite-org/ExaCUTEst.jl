@@ -63,8 +63,8 @@ reached by the wrong name, with the wrong default, or not at all.
 
 Keywords such as `element_hessian`, `ref_param_rounding`, `single` and
 `fortran_literals` select between readings of the Fortran, so they are part of
-a model's identity. `ExaCUTEstModel` forwards keywords to the native builder,
-and a keyword the builder does not take raises a `MethodError`.
+a model's identity, and `ExaCUTEstModel` forwards keywords to the native
+builder.
 
 ### Element-type gate
 

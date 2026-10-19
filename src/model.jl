@@ -58,8 +58,7 @@ function ExaCUTEstModel(name::AbstractString, args...; T = Float64,
     # Only external-Fortran problems have native entries, so this cannot shadow
     # a decodable problem. `kwargs` reach the native model too: several take
     # options of their own (`element_hessian`, `ref_param_rounding`, `single`,
-    # `fortran_literals`) that select between readings of the Fortran, and a
-    # keyword a native model does not accept raises a MethodError naming it.
+    # `fortran_literals`) that select between readings of the Fortran.
     if isempty(allparams) && haskey(NATIVE_MODELS, String(name))
         return NATIVE_MODELS[String(name)](; T, backend, kwargs...)
     end
