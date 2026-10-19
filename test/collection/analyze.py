@@ -79,6 +79,8 @@ ZERO_REF_EXCEPTIONS = {
     'TAXR13322': ({'cons'}, 'x0 satisfies every constraint exactly in the Float64 reference; the test side leaves roundoff'),
     'TAX53322':  ({'cons'}, 'x0 satisfies every constraint exactly in the Float64 reference; the test side leaves roundoff'),
     'TAXR53322': ({'cons'}, 'x0 satisfies every constraint exactly in the Float64 reference; the test side leaves roundoff'),
+    'TAX213322':  ({'cons'}, 'x0 satisfies every constraint exactly in the Float64 reference; the test side leaves roundoff'),
+    'TAXR213322': ({'cons'}, 'x0 satisfies every constraint exactly in the Float64 reference; the test side leaves roundoff'),
     'GOULDQP2':  ({'cons'}, 'cons(x0) is exactly zero in Float64; the Float32 model rounds x0 and leaves a residual'),
     'GOULDQP3':  ({'cons'}, 'cons(x0) is exactly zero in Float64; the Float32 model rounds x0 and leaves a residual'),
 }
