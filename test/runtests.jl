@@ -16,11 +16,16 @@
 import ExaCUTEst
 using ExaCUTEst: ExaCUTEstModel, row_linearity, sif_variable_names,
     sif_constraint_names, classification, is_truly_unconstrained,
-    external_fortran_problems, sif_problem_path, native_problems,
-    oracle_tier_problems
+    external_fortran_problems, sif_problem_path, native_problems
 using Test, LinearAlgebra, SparseArrays, Random
 using NLPModels
 using CUTEst
+using FileWatching.Pidfile: mkpidlock
+
+# CUTEst decodes and compiles every problem into one shared directory, so
+# concurrent CUTEstModel builds on one machine collide. Every construction
+# holds this lock.
+const CUTEST_LOCK = "/tmp/cutest-decode.pid"
 
 # HS68 and HS69 are in this list deliberately: they are external-Fortran
 # problems served by hand-written native models, so agreement with CUTEst is
@@ -32,6 +37,13 @@ const AGREE = ["ROSENBR", "HS14", "HS35", "HS45", "DECONVC", "BROWNAL",
 relerr(a, b) = begin
     m = isfinite.(a)
     any(m) ? maximum(abs.(a[m] .- b[m]) ./ (1 .+ max.(abs.(a[m]), abs.(b[m])))) : 0.0
+end
+
+# relerr over the union of two sparse matrices' patterns. Densifying is not an
+# option: DEGDIAG has 100001 variables, so its dense Hessian is 80 GB.
+function sprelerr(A, B)
+    I, J, _ = findnz(abs.(A) .+ abs.(B))
+    return relerr([A[i, j] for (i, j) in zip(I, J)], [B[i, j] for (i, j) in zip(I, J)])
 end
 
 # SIF names as the Fortran reference reports them. The buffers must be
@@ -128,77 +140,32 @@ end
         ext = external_fortran_problems()
         @test length(ext) == 34
         @test "AKIVA" in ext
-        nlp = ExaCUTEstModel("AKIVA")              # oracle tier
+        # every external-Fortran problem has a native model, and only those do
+        @test native_problems() == sort(ext)
+        nlp = ExaCUTEstModel("AKIVA")
         @test isfinite(obj(nlp, nlp.meta.x0))
-        @test_throws ExaCUTEst.ExaModelsSIF.ExternalFortranError ExaCUTEstModel(
-            "AKIVA"; external = :error)
-        @test_throws ErrorException ExaCUTEstModel("AKIVA"; backend = :fake)
-        @test_throws ErrorException ExaCUTEstModel("ROSENBR"; external = :nonsense)
-        # AKIVA builds at any element type: its port is generic and the
-        # oracle cache buffers carry the model's type.
         @test eltype(ExaCUTEstModel("AKIVA"; T = Float32).meta.x0) === Float32
-
-        # the same problem twice used to fail with CUTEstException("memory
-        # allocation error"): the Fortran decoder allows one live model per
-        # name, and the oracle closures keep the first one open forever
+        # a native model is independent of any other built from the same name
         nlp2 = ExaCUTEstModel("AKIVA")
         @test obj(nlp2, nlp2.meta.x0) == obj(nlp, nlp.meta.x0)
-        # a sweep must not fail on repeats either
-        @test all(isfinite(obj(ExaCUTEstModel(n), ExaCUTEstModel(n).meta.x0))
-                  for n in ("AKIVA", "HS88", "AKIVA", "HS88"))
-    end
-
-    @testset "native models" begin
-        nat = native_problems()
-        orc = oracle_tier_problems()
-        # A PROPERTY, not a snapshot of today's registry. The earlier form
-        # named the two problems that happened to be native and the count that
-        # happened to be on the oracle tier, so it failed as soon as a port
-        # landed -- an assertion whose subject is the state of the project is a
-        # countdown, and what it counted down to was us doing the work.
-        @test isempty(intersect(nat, orc))
-        @test sort(vcat(nat, orc)) == sort(external_fortran_problems())
-        @test isempty(orc)                 # every external-Fortran port exists
-        @test sort(nat) == sort(external_fortran_problems())
-        # A native model must NOT get the oracle tier's backend refusal --
-        # preferring the native model is the whole point. Asserted on the
-        # MESSAGE, not on an exception type: what a nonsense backend throws
-        # downstream is Julia's business, not this package's contract.
-        errmsg(f) = try (f(); nothing) catch e; sprint(showerror, e) end
-        refusal = "cannot be placed on a `backend`"
-        @test occursin(refusal, errmsg(() -> ExaCUTEstModel("AKIVA"; backend = :fake)))
-        let m = errmsg(() -> ExaCUTEstModel("HS68"; backend = :fake))
-            @test m === nothing || !occursin(refusal, m)
-        end
-        # ... and external = :error must not reject a problem we serve natively
-        @test ExaCUTEstModel("HS68"; external = :error) isa Any
+        # with parameter overrides the native model does not apply, and the
+        # decoder refuses the external Fortran rather than guessing
         @test_throws ExaCUTEst.ExaModelsSIF.ExternalFortranError ExaCUTEstModel(
-            "AKIVA"; external = :error)
-        # HS67 was rejected for disagreeing with the reference in the 4th
-        # digit; it must stay on the oracle tier
-        @test "HS67" in orc
+            "AKIVA", "-param", "N=3")
     end
 
     @testset "agreement with CUTEst.jl: $name" for name in AGREE
-        ref = CUTEstModel(name)
+        ref = mkpidlock(() -> CUTEstModel(name), CUTEST_LOCK; wait = true)
         try
             nlp = ExaCUTEstModel(name)
             @test nlp.meta.nvar == ref.meta.nvar
             @test nlp.meta.ncon == ref.meta.ncon
 
-            # Decoded models are in SIF declaration order, so they must be
-            # permuted by name. NATIVE models are hand-written in CUTEst's own
-            # ordering and cannot be permuted that way at all -- they have no
-            # decode, so sif_variable_names would raise ExternalFortranError.
-            isnative = name in native_problems()
-            vp, perm = if isnative
-                collect(1:ref.meta.nvar), collect(1:ref.meta.ncon)
-            else
-                v = indexin(refnames(ref, :var), sif_variable_names(name))
-                c = ref.meta.ncon > 0 ?
-                    indexin(refnames(ref, :con), sif_constraint_names(name)) : Int[]
-                v, c
-            end
+            # Models are in SIF declaration order, native ones included, so
+            # they are permuted by name onto CUTEst's ordering.
+            vp = indexin(refnames(ref, :var), sif_variable_names(name))
+            perm = ref.meta.ncon > 0 ?
+                indexin(refnames(ref, :con), sif_constraint_names(name)) : Int[]
             @test !any(isnothing, vp)
             @test !any(isnothing, perm)
 
@@ -215,7 +182,7 @@ end
                                 ref.meta.ncon, ref.meta.nvar)
                     Jb = sparse(jac_structure(nlp)..., jac_coord(nlp, xm),
                                 nlp.meta.ncon, nlp.meta.nvar)[perm, vp]
-                    @test relerr(vec(Matrix(Ja)), vec(Matrix(Jb))) < 1e-8
+                    @test sprelerr(Ja, Jb) < 1e-8
                 end
                 y = ref.meta.ncon > 0 ? randn(ref.meta.ncon) : Float64[]
                 ym = zeros(length(y)); ym[perm] = y
@@ -225,7 +192,7 @@ end
                             nlp.meta.nvar, nlp.meta.nvar)
                 Ha = Ha + transpose(Ha)
                 Hb = (Hb + transpose(Hb))[vp, vp]
-                @test relerr(vec(Matrix(Ha)), vec(Matrix(Hb))) < 1e-8
+                @test sprelerr(Ha, Hb) < 1e-8
             end
         finally
             finalize(ref)

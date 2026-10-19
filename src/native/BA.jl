@@ -1,8 +1,7 @@
 # Bundle adjustment: a generic Julia port of the BA-L* external Fortran.
 #
 # Written as a plain, type-generic Julia function -- NOT as an ExaModels
-# expression (Sungho 2026-10-16: "it should be a generic julia function").
-# That matters for three reasons:
+# expression. That matters for three reasons:
 #   * it compiles like ordinary Julia code. Building the same computation as a
 #     symbolic expression inside a SIF element did not finish compiling in an
 #     hour on a 57-variable problem, because ExaModels nests a type parameter
@@ -11,13 +10,11 @@
 #     numbers for AD derivatives, and on BigFloat for a precision check, with
 #     no separate code paths;
 #   * it contains no allocation, no branching on values and no indexing, so it
-#     is callable from a GPU kernel -- the "scalar indexing disabled"
-#     requirement of roadmap step 4.
+#     is callable from a GPU kernel, with scalar indexing disabled.
 #
 # The Fortran's hand-coded G(12) and H(78) derivative arrays are NOT ported;
-# derivatives come from AD over this one function. That is what keeps the port
-# clear of the error class that made the legacy HS67 port wrong in the 4th
-# digit.
+# derivatives come from AD over this one function, so the port cannot inherit
+# an error in them.
 #
 # THE ROTATION DISCREPANCY. The Fortran's second camera coordinate reads
 #     cy = x2*ct + (ez*x1 - ex*x3)*st + ex*p
@@ -77,9 +74,7 @@ end
                 v[10], v[11], v[12], yres; rodrigues)
 
 # ---------------------------------------------------------------------------
-# Interfacing the generic function to ExaModels as an external oracle
-# (Sungho 2026-10-16: "this generic julia function can be interfaced with
-# ExaModels as an external oracle").
+# Interfacing the generic function to ExaModels as an external oracle.
 #
 # Everything below is assembly: the mathematics lives entirely in
 # ba_residual, and every derivative comes from AD over it, so the Fortran's
@@ -178,9 +173,8 @@ function ba_oracle_model(name::AbstractString; T = Float64, backend = nothing,
     # device. `ba_residual` itself is allocation- and branch-free, so a device
     # path is a matter of calling it from a kernel, not of rewriting it.
     backend === nothing || error(
-        "ba_oracle_model does not take a backend yet: the port's callbacks " *
-        "run on the CPU. ba_residual is GPU-safe, so this is step 4 of the " *
-        "roadmap, not a limitation of the port.")
+        "ba_oracle_model runs its callbacks on the CPU and takes no backend; " *
+        "ba_kernel_model builds the same model on a backend.")
     P = ExaModelsSIF.sif_decode(sif_problem_path(name); external = :defer)
     obs, rows, isobj = ba_observations(P, T)
     n = length(P.varnames)

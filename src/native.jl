@@ -1,28 +1,22 @@
 # native.jl — hand-written ExaModels for problems the decoder cannot reach.
 #
-# A problem lands here only when BOTH hold: its SIF file uses external Fortran
-# (so sif_decode refuses it), and the Fortran computes something Julia can
-# express exactly.
+# A problem lands here only when its SIF file uses external Fortran, so
+# sif_decode refuses it. All 34 such problems in the collection have an entry.
 #
-# TWO SHAPES live here. HS68/HS69 are small enough to write as ExaModels
-# expressions directly. The BA-L* family is NOT: its reprojection chain is
-# ~30 operations deep, and built as an expression it did not finish compiling
-# in an hour on a 57-variable problem, because ExaModels nests a type
-# parameter per operation. That family is instead a GENERIC JULIA FUNCTION
-# interfaced as an external oracle, with derivatives by AD over it (Sungho
-# 2026-10-16: "it should be a generic julia function" ... "this generic julia
-# function can be interfaced with ExaModels as an external oracle"). Prefer
-# that shape for anything non-trivial: it compiles like ordinary Julia, it is
-# generic over the element type for free, and being allocation- and
-# branch-free it is callable from a GPU kernel. The gain over the oracle tier is real -- a native model is
-# a SIMD-abstracted ExaModel that runs on a GPU, where an oracle is a CPU
-# Fortran callback whose Hessian costs one hprod per column.
+# The shape of a port follows what the Fortran depends on. Fortran that reads
+# only element parameters is evaluated at build time and folded into an
+# ordinary ExaModel (HS68/HS69, VANDANIUM*). Fortran that depends on the
+# variables becomes a generic Julia function interfaced to ExaModels as an
+# oracle, with derivatives by automatic differentiation over it. It is never an
+# ExaModels expression: ExaModels nests a type parameter per operation, so a
+# chain as deep as the BA-L* reprojection (~30 operations) does not finish
+# compiling. A generic function compiles like ordinary Julia, is generic over
+# the element type, and, being allocation- and branch-free, is callable from a
+# GPU kernel.
 #
-# Each entry must be validated against a CUTEstModel of the same problem
-# before being added (see test/runtests.jl, "native models"); a hand-written
-# model that merely looks right is worse than an oracle, because it is wrong
-# silently. The legacy 0.1 port contained three candidates and only two
-# survived that check.
+# Each entry is validated against a CUTEstModel of the same problem through
+# ExaCUTEstModel (test/native_verify.jl). A hand-written model that merely looks
+# right is wrong silently.
 
 include("native/HS68_69.jl")
 include("native/BA.jl")
@@ -143,9 +137,9 @@ _jimack_model(; T = Float64, kwargs...) =
 """
     NATIVE_MODELS :: Dict{String,Function}
 
-External-Fortran problems that have a verified native ExaModels
-implementation, by problem name. `ExaCUTEstModel` prefers these over the
-oracle tier, so they accept a `backend` and run on a GPU.
+External-Fortran problems and their native ExaModels implementations, by
+problem name. `ExaCUTEstModel` builds these in place of a decoded model; every
+one accepts a `backend`.
 """
 const NATIVE_MODELS = Dict{String,Function}(
     "HS68" => hs68_model,
@@ -178,17 +172,7 @@ const NATIVE_MODELS = Dict{String,Function}(
 """
     native_problems() -> Vector{String}
 
-Problems served by a verified hand-written ExaModel rather than by decoding
-or by the oracle tier.
+Problems served by a hand-written ExaModel rather than by decoding: every
+problem in [`external_fortran_problems`](@ref).
 """
 native_problems() = sort(collect(keys(NATIVE_MODELS)))
-
-"""
-    oracle_tier_problems() -> Vector{String}
-
-External-Fortran problems that still go through the CUTEst-backed oracle
-tier: [`external_fortran_problems`](@ref) minus [`native_problems`](@ref).
-These are CPU-only and refuse a `backend`.
-"""
-oracle_tier_problems() =
-    sort(setdiff(external_fortran_problems(), native_problems()))

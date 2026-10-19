@@ -1,20 +1,23 @@
-# test/ba_verify.jl -- roadmap step 3 for the BA-L* family: does the generic
-# Julia port, interfaced as an ExaModels oracle, reproduce the Fortran?
+# test/ba_verify.jl -- for the BA-L* family: does the generic Julia port,
+# interfaced as an ExaModels oracle, reproduce the Fortran?
 #
 #   julia --project=. test/ba_verify.jl
 #
-# This verification is INDEPENDENT, unlike test/oracle_assembly.jl: two
-# genuinely different implementations rather than two callers of the same
-# compiled routine. That independence is what caught the legacy HS67 port.
+# The script switches to the test/gpu environment, which has CUTEst.jl.
+#
+# The comparison is independent: the port and the Fortran are two different
+# implementations of the same problem.
 #
 # Does the Julia-port oracle model match the Fortran on every callback?
 # obj, grad, cons, jac and hprod, at x0 and a perturbed point, name-permuted.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModelsSIF, ExaModels, NLPModels, ForwardDiff
 using SparseArrays, LinearAlgebra, Random
 using FileWatching.Pidfile: mkpidlock
 import CUTEst
-log = open(get(ENV, "OUT_TSV",
-    joinpath(@__DIR__, "..", "runs", "ba_verify.tsv")), "w")
+const OUT = get(ENV, "OUT_TSV", joinpath(@__DIR__, "..", "runs", "ba_verify.tsv"))
+mkpath(dirname(OUT))
+log = open(OUT, "w")
 println(log, "problem\tverdict\tdetail"); flush(log)
 rel(a, b) = begin
     m = isfinite.(a) .& isfinite.(b)

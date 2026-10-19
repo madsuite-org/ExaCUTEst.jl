@@ -1,54 +1,85 @@
 # ExaCUTEst.jl
 
-The [CUTEst](https://github.com/ralna/CUTEst) test set as [ExaModels](https://github.com/exanauts/ExaModels.jl) — on the CPU or on a GPU — with an API that mirrors [CUTEst.jl](https://github.com/JuliaSmoothOptimizers/CUTEst.jl).
+[![CI](https://github.com/madsuite-org/ExaCUTEst.jl/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/madsuite-org/ExaCUTEst.jl/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/madsuite-org/ExaCUTEst.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/madsuite-org/ExaCUTEst.jl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+ExaCUTEst provides the [CUTEst](https://github.com/ralna/CUTEst) test set as
+[ExaModels](https://github.com/exanauts/ExaModels.jl), on the CPU or on a GPU,
+with an API that follows [CUTEst.jl](https://github.com/JuliaSmoothOptimizers/CUTEst.jl).
 
 ```julia
 using ExaCUTEst, NLPModels
 
 nlp = ExaCUTEstModel("ROSENBR")
-obj(nlp, nlp.meta.x0)                       # the NLPModels API, as usual
+obj(nlp, nlp.meta.x0)
 
-nlp = ExaCUTEstModel("READING4", "-param", "N=1000")   # size parameters
-nlp = ExaCUTEstModel("DIXMAANA1"; backend = CUDABackend())   # on the GPU
+nlp = ExaCUTEstModel("DIXMAANA1", "-param", "M=1000")     # size parameters
+nlp = ExaCUTEstModel("ROSENBR"; T = Float32)               # element type
+
+using CUDA
+nlp = ExaCUTEstModel("DIXMAANA1"; backend = CUDABackend()) # on a GPU
 ```
 
-Problems are read from their SIF files by [ExaModelsSIF.jl](https://github.com/madsuite-org/ExaModelsSIF.jl), a SIF front end for ExaModels, so the whole collection is available and each problem arrives as a SIMD-abstracted ExaModel with automatic differentiation on every backend ExaModels supports (CUDA, AMDGPU, oneAPI, Metal).
+Problems are read from their SIF files by
+[ExaModelsSIF.jl](https://github.com/madsuite-org/ExaModelsSIF.jl), so the
+whole collection is available, and each problem is an ExaModel with automatic
+differentiation on every backend ExaModels supports.
 
 ## Relationship to CUTEst.jl
 
-CUTEst.jl calls the Fortran CUTEst library: it decodes each SIF file with `sifdecoder`, compiles a shared library, and evaluates through Fortran callbacks on the CPU. ExaCUTEst decodes the same SIF files into ExaModels expression graphs in Julia.
+CUTEst.jl calls the Fortran CUTEst library: it decodes each SIF file with
+`sifdecoder`, compiles a shared library, and evaluates through Fortran
+callbacks on the CPU. ExaCUTEst decodes the same SIF files into ExaModels in
+Julia.
 
 | | CUTEst.jl | ExaCUTEst.jl |
 |---|---|---|
-| evaluation | compiled Fortran callbacks | ExaModels SIMD kernels |
+| evaluation | compiled Fortran callbacks | ExaModels kernels |
 | GPU | no | yes, via `backend` |
-| element type | `Float32`/`Float64`/`Float128` | any, incl. `BigFloat` |
-| build step | `sifdecoder` + gfortran per problem | none |
-| concurrent models | one per name (global decoder state) | unrestricted |
+| element type | `Float32`, `Float64`, `Float128` | `Float32`, `Float64`, `BigFloat`, and others |
+| build step | `sifdecoder` and a Fortran compiler per problem | none |
+| models of one problem at a time | one | any number |
 
-What ports directly: the constructor (`CUTEstModel` → `ExaCUTEstModel`), its `-param` arguments, `set_mastsif`, `list_sif_problems`, `generator_sif_problems`, `select_sif_problems` with all its keywords, and the NLPModels interface. `finalize(nlp)` still runs and is simply unnecessary.
+These carry over by renaming `CUTEstModel` to `ExaCUTEstModel`: its `-param`
+arguments, `set_mastsif`, `list_sif_problems`, `generator_sif_problems`,
+`select_sif_problems` with its keywords, and the NLPModels interface.
+`finalize(nlp)` is accepted and unnecessary. The library functions
+`sifdecoder`, `build_libsif`, `clear_libsif` and `manage_libsif` have no
+counterpart, because nothing is compiled.
 
-Three real differences to know about:
+Three differences matter when porting code:
 
-- **Ordering.** CUTEst reorders variables (nonlinear first) and rows (equality and linear first); a decoded model keeps SIF declaration order. Use `sif_variable_names` and `sif_constraint_names` to map one indexing onto the other — that is exactly what the test suite does to compare the two.
-- **Row linearity.** `nlp.meta.nlin` is `0` for every model, because ExaModels does not classify rows. Use `row_linearity(name)`, which reads it from the decode.
-- **External Fortran.** 34 problems append hand-coded Fortran element/group functions to their SIF file (`external_fortran_problems()`). Two of them, `HS68` and `HS69`, have verified native ExaModels (`native_problems()`) because their Fortran only computes the standard normal CDF, which Julia's `erf` gives exactly; those run on a GPU like any decoded problem. The remaining 32 (`oracle_tier_problems()`) are evaluated through the compiled Fortran, wrapped as ExaModels oracles: CPU only, `Float64` only, and `backend` is refused for them. `external = :error` rejects them instead. Their objective Hessian is reconstructed one Hessian-column at a time (ExaModels' `ScalarNonlinearOracle` takes a Hessian-vector product, not an explicit sparse Hessian), so it costs one Fortran `hprod` per column: 6.3 s against CUTEst.jl's 0.43 s on PARKCH (15 columns) and 63.6 s against 0.03 s on RAYBENDS (2050 columns). Values, gradients, constraints and Jacobians carry no such penalty. With MadNLP, 15 of the 34 solve; the rest exhaust their budget inside a single Hessian (see `runs/oracle_tier_madnlp_2026-10-16.tsv`). Lifting that needs an explicit `hess!` on `ScalarNonlinearOracle` upstream.
+- **Ordering.** CUTEst reorders variables (nonlinear first) and constraints
+  (equality and linear first). An ExaCUTEst model keeps the order of the SIF
+  file. `sif_variable_names` and `sif_constraint_names` give the names in model
+  order, which maps one indexing onto the other.
+- **Row linearity.** `nlp.meta.nlin` is `0` for every model, because ExaModels
+  does not classify constraints. `row_linearity(name)` reads it from the SIF
+  file instead.
+- **Name clashes.** ExaCUTEst exports the same names as CUTEst.jl. With both
+  packages loaded, the shared names (`list_sif_problems`, `select_sif_problems`,
+  `set_mastsif`, `generator_sif_problems`) must be qualified, as in
+  `ExaCUTEst.select_sif_problems(...)`.
 
-One sharp edge: ExaCUTEst exports the same names as CUTEst.jl, which is what
-makes porting a rename — but it also means that with **both** packages loaded
-Julia leaves the shared names (`list_sif_problems`, `select_sif_problems`,
-`set_mastsif`, `generator_sif_problems`) unbound, and calls must be qualified
-as `ExaCUTEst.select_sif_problems(...)`. Only code comparing the two ever
-loads both.
+## Problems with external Fortran
 
-The library-management functions (`sifdecoder`, `build_libsif`, `clear_libsif`, `manage_libsif`) have no counterpart, because nothing is compiled and no shared library is written.
+34 problems append hand-written Fortran routines to their SIF files, which a
+SIF decoder cannot translate (`external_fortran_problems()`). Each has a native
+Julia implementation in `src/native/`. Where the routine depends on the
+variables, it is a generic Julia function attached to the model as an ExaModels
+oracle, with derivatives from automatic differentiation; where it depends only
+on parameters, it is evaluated at build time and folded into an ordinary model.
+All 34 run on a GPU.
 
 ## Problem collections
 
-The collections are Julia artifacts — the same ones CUTEst.jl v1.4.0 declares, so both packages read byte-identical problem files. `ENV["MASTSIF"]` names the active directory and is honored if set before loading.
+The collections are the Julia artifacts that CUTEst.jl v1.4.0 declares, so both
+packages read the same problem files. `ENV["MASTSIF"]` selects the active
+collection and is honored if set before the package loads.
 
 ```julia
-set_mastsif()                   # "sifcollection", the CUTEst NLP set (1548 problems)
+set_mastsif()                   # "sifcollection", the CUTEst set (1548 problems)
 set_mastsif("maros-meszaros")   # convex QPs
 set_mastsif("netlib-lp")        # LPs
 ```
@@ -61,26 +92,94 @@ select_sif_problems(; objtype = :sum_of_squares)
 filter(is_truly_unconstrained, select_sif_problems())
 ```
 
-Selection reads `src/classf.json`, built by `scripts/build_classification.jl`: classification letters from the collection's `CLASSF.DB`, sizes and bound/row-type counts from decoding every problem. Regenerating it needs no Fortran toolchain for the 1509 decodable problems in the table; the other 30 (external Fortran, of the 34 total — 4 are absent from `CLASSF.DB`) take their metadata from the compiled routine.
-
-That table is checked against CUTEst.jl's own Fortran-derived `classf.json` by `scripts/compare_classification.jl`: **identical on all 19 fields across all 1539 problems CUTEst.jl classifies**. Ours covers all 1548 — nine problems (the `BA-L16`/`BA-L52` pairs, `LRCOVTYPE`, the four `MNISTS*`) are absent from `CLASSF.DB` and so unselectable in CUTEst.jl, and are picked up here from their SIF files' own classification lines.
+Selection reads `src/classf.json`, generated by
+`scripts/build_classification.jl` from the collection's `CLASSF.DB` and from
+decoding each problem. It agrees with CUTEst.jl's own table on all 19 fields
+for all 1539 problems CUTEst.jl classifies, and also covers the nine problems
+absent from `CLASSF.DB`, so all 1548 can be selected.
 
 ## Correctness
 
-ExaModelsSIF's decoder is validated against the Fortran reference over the entire collection — 1548/1548, comparing values, gradients, constraints, Jacobians and Lagrangian Hessians at two points per problem. A handful of disagreements were adjudicated to reference-side defects, reported upstream as [SIFDecode#55](https://github.com/ralna/SIFDecode/issues/55) and [#56](https://github.com/ralna/SIFDecode/issues/56). This package's own suite (`test/runtests.jl`) covers the wrapper API and re-checks agreement with CUTEst.jl on a sample.
+The collection has 1548 problems, and each is compared against the compiled
+Fortran through CUTEst.jl: objective, gradient, constraints, Jacobian,
+Lagrangian Hessian and Hessian-vector product, at the starting point and at a
+perturbed point. All 1548 agree. For a few problems the reference's hand-coded
+derivatives contradict its own function values, including HS67, HS85 and
+BLEACHNG, and those are compared against a finite difference of the reference
+instead; defects of this kind were reported upstream as
+[SIFDecode#55](https://github.com/ralna/SIFDecode/issues/55) and
+[#56](https://github.com/ralna/SIFDecode/issues/56).
 
-## History
+On a GPU, every callback of all 1548 problems is compared against the CPU in
+`Float64` and in `Float32`, with no failures. A difference above 1000 units in
+the last place passes only if its size tracks the precision, that is, if the
+`Float32` error exceeds the `Float64` error by about the ratio of the two
+machine epsilons. A difference that does not change with precision indicates a
+wrong value, and fails at any size.
 
-Versions through 0.1 shipped one hand-written Julia file per problem, around 900 of them. Version 0.2 replaced that with the decoder: it covers every problem rather than a subset, and there is no per-problem source to keep in sync with the SIF files.
+- `test/native_verify.jl` compares the 34 native implementations against the
+  Fortran.
+- `test/*_gpu_verify.jl` compare each family's GPU kernels against the CPU.
+- `test/collection/` runs the full comparison over the collection; its
+  [README](test/collection/README.md) describes how to run it and how each
+  verdict is decided.
 
-Two of those hand-written models were kept, in `src/native/`. They are the ones that buy something the decoder cannot: `HS68` and `HS69` use external Fortran that computes only the normal CDF, so a native Julia model is exact and GPU-capable where an oracle is neither. Both were re-validated against the Fortran reference before being kept — objective, gradient, constraints, Jacobian and Lagrangian Hessian at two points, plus CPU-vs-CUDA agreement. A third candidate, `HS67`, was **rejected**: it substitutes closed-form roots for the Fortran's fixed-point iteration and disagrees with the reference in the fourth digit (−868.6357 against −868.7250), so it stays on the oracle tier. The remaining 929 hand-written models covered problems the decoder already handles, and the 19 whose names were not in the collection turned out to be hyphen-renames (`HUES-MOD` as `HUES_MOD`), multi-problem files, or SIF files upstream dropped between collection releases.
+## Installation
+
+ExaCUTEst is not yet registered. It needs ExaModelsSIF.jl and the
+`sif-integration` branch of
+[madsuite-org/ExaModels.jl](https://github.com/madsuite-org/ExaModels.jl),
+which carries changes not yet in a released ExaModels. Install them first,
+since Pkg does not follow a dependency's own `[sources]`:
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/madsuite-org/ExaModels.jl", rev = "sif-integration")
+Pkg.add(url = "https://github.com/madsuite-org/ExaModelsSIF.jl")
+Pkg.add(url = "https://github.com/madsuite-org/ExaCUTEst.jl")
+```
+
+GPU use needs CUDA.jl, or another KernelAbstractions backend, loaded by the
+user. On GPUs of compute capability 7.0, such as the V100, pin the CUDA runtime
+to 12.9, since later runtimes no longer support that architecture.
+
+Versions up to 0.1 implemented each problem by hand. Version 0.2 decodes the
+SIF files instead, and covers the whole collection.
+
+ExaCUTEst itself needs no Fortran compiler. CUTEst.jl is a test dependency,
+used as the reference, so running the tests needs `gfortran`.
 
 ## References
 
-- N. I. M. Gould, D. Orban, Ph. L. Toint, *CUTEst: a Constrained and Unconstrained Testing Environment with safe threads for mathematical optimization*, Computational Optimization and Applications 60(3), 545–557, 2015.
-- A. R. Conn, N. I. M. Gould, Ph. L. Toint, *LANCELOT: A Fortran Package for Large-scale Nonlinear Optimization (Release A)*, Springer, 1992.
-- S. Shin, F. Pacaud, M. Anitescu, *Accelerating optimal power flow with GPUs: SIMD abstraction of nonlinear programs and its application to stochastic optimal power flow*, HICSS-56, 2023.
+1. N. I. M. Gould, D. Orban, Ph. L. Toint, *CUTEst: a Constrained and Unconstrained Testing Environment with safe threads for mathematical optimization*, Computational Optimization and Applications 60(3), 545-557, 2015. [doi:10.1007/s10589-014-9687-3](https://doi.org/10.1007/s10589-014-9687-3)
+2. A. R. Conn, N. I. M. Gould, Ph. L. Toint, *LANCELOT: A Fortran Package for Large-Scale Nonlinear Optimization (Release A)*, Springer Series in Computational Mathematics, Springer, 1992. [doi:10.1007/978-3-662-12211-2](https://doi.org/10.1007/978-3-662-12211-2)
+3. A. R. Conn, N. I. M. Gould, D. Orban, Ph. L. Toint, *The SIF Reference Report (revised version)*, distributed with SIFDecode. [sif.pdf](https://github.com/ralna/SIFDecode/blob/master/doc/pdf/sif.pdf)
+4. S. Gratton, Ph. L. Toint, *S2MPJ and CUTEst optimization problems for Matlab, Python and Julia*, Optimization Methods and Software 40(4), 871-903, 2025. [doi:10.1080/10556788.2025.2490640](https://doi.org/10.1080/10556788.2025.2490640), [arXiv:2407.07812](https://arxiv.org/abs/2407.07812)
+5. S. Shin, M. Schanen, F. Pacaud, A. Montoison, M. Anitescu, *ExaModels.jl: An Algebraic Modeling System for Nonlinear Programming on GPUs*, 2026. [arXiv:2608.16265](https://arxiv.org/abs/2608.16265)
+6. S. Shin, M. Anitescu, F. Pacaud, *Accelerating optimal power flow with GPUs: SIMD abstraction of nonlinear programs and condensed-space interior-point methods*, Electric Power Systems Research 236, 110651, 2024. [doi:10.1016/j.epsr.2024.110651](https://doi.org/10.1016/j.epsr.2024.110651)
+7. A. Montoison, D. Orban, A. Soares Siqueira, and contributors, *CUTEst.jl: Julia's CUTEst interface*. [doi:10.5281/zenodo.1188851](https://doi.org/10.5281/zenodo.1188851)
+8. D. Orban, A. Soares Siqueira, and contributors, *NLPModels.jl: Data Structures for Optimization Models*. [doi:10.5281/zenodo.2558627](https://doi.org/10.5281/zenodo.2558627)
+9. J. Revels, M. Lubin, T. Papamarkou, *Forward-Mode Automatic Differentiation in Julia*, 2016. [arXiv:1607.07892](https://arxiv.org/abs/1607.07892)
+10. V. Churavy, *KernelAbstractions.jl*. [doi:10.5281/zenodo.4021259](https://doi.org/10.5281/zenodo.4021259)
+
+## Acknowledgements
+
+The problems are those of the CUTEst collection [1], in the SIF format of
+LANCELOT [2, 3], maintained by the CUTEst developers; the collections are
+downloaded from their releases. CUTEst.jl [7] defines the API this package
+follows and, through SIFDecode and the compiled Fortran, is the reference every
+model is validated against. Models are ExaModels [5, 6] and implement the
+NLPModels.jl [8] interface. The native implementations differentiate with
+ForwardDiff.jl [9] and run on GPUs through KernelAbstractions.jl [10].
+[S2MPJ](https://github.com/GrattonToint/S2MPJ) [4] translates the same
+collection into native Matlab, Python and Julia.
+
+Version 0.2 builds on ExaCUTEst 0.1, written by Sungho Shin, which implemented
+problems of the collection by hand in ExaModels; its history is preserved in
+this repository.
 
 ## License
 
-MIT; see [LICENSE](LICENSE). No CUTEst Fortran or C source is included or distributed. The SIF problem files are distributed by the CUTEst project under their own terms and are downloaded as artifacts.
+MIT; see [LICENSE](LICENSE). No CUTEst Fortran or C source is included or
+distributed. The SIF problem files are distributed by the CUTEst project under
+their own terms and are downloaded as artifacts.

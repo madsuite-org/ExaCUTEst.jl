@@ -7,11 +7,12 @@
 # Sharded and restartable like valsweep.jl. A problem whose single evaluation
 # outlasts the driver's process timeout is attributed from current.<shard>.txt
 # on the next pass, so one wedged Hessian costs one problem, not the sweep.
-# The external-Fortran oracle tier is excluded -- it is measured separately in
-# runs/oracle_tier_madnlp_2026-10-16.tsv, and its Hessian cost makes most of
-# it unsolvable for reasons that have nothing to do with the decoder.
+#
+# Needs MadNLP, which is not a dependency of this package: run it in an
+# environment that has both, e.g. one that `Pkg.develop`s this checkout and
+# adds MadNLP.
 using ExaCUTEst, MadNLP, NLPModels
-using ExaCUTEst: ExaCUTEstModel, list_sif_problems, oracle_tier_problems, classification
+using ExaCUTEst: ExaCUTEstModel, list_sif_problems, classification
 
 const SHARD = parse(Int, get(ENV, "SWEEP_SHARD", "0"))
 const NSHARDS = parse(Int, get(ENV, "SWEEP_NSHARDS", "1"))
@@ -40,8 +41,7 @@ end
 
 function run_sweep()
     d = classification()
-    skip = Set(oracle_tier_problems())
-    names = [p for p in list_sif_problems() if !(p in skip)]
+    names = list_sif_problems()
     # smallest first, so a shard yields information early
     sort!(names; by = p -> haskey(d, p) ?
           d[p]["variables"]["number"] + d[p]["constraints"]["number"] : typemax(Int))

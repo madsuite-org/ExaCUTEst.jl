@@ -1,17 +1,17 @@
 #!/bin/bash
 # Parallel driver for test/solvesweep.jl.
-#   bash test/solvesweep_driver.sh [nshards]
+#   SWEEP_PROJECT=<env with ExaCUTEst and MadNLP> bash test/solvesweep_driver.sh [nshards]
 # Each shard runs under `timeout`, so a wedged evaluation kills one pass; the
 # next pass attributes that problem from its current.<shard>.txt and moves on.
 cd "$(dirname "$0")/.." || exit 1
 N=${1:-16}
-J="$HOME/.juliaup/bin/julia"
+J="${JULIA:-julia}"
 PASS_TIMEOUT=${PASS_TIMEOUT:-1800}
 oneshard() {
     local s=$1
     for i in $(seq 1 200); do
         SWEEP_SHARD=$s SWEEP_NSHARDS=$N timeout --kill-after=30 "$PASS_TIMEOUT" \
-            "$J" --project=. test/solvesweep.jl >> "runs/solve_progress.$s.log" 2>&1
+            "$J" --project="${SWEEP_PROJECT:-.}" test/solvesweep.jl >> "runs/solve_progress.$s.log" 2>&1
         rc=$?
         echo "driver[$s]: pass $i rc=$rc" >> "runs/solve_progress.$s.log"
         [ "$rc" -eq 42 ] && continue      # chunk boundary: keep going
