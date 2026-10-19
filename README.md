@@ -1,99 +1,86 @@
 # ExaCUTEst.jl
 
-ExaCUTEst.jl provides CPU/GPU-compatible [ExaModels](https://github.com/exanauts/ExaModels.jl) implementations of benchmark problems from the [CUTEst](https://github.com/ralna/CUTEst) test set. It is designed to complement [CUTEst.jl](https://github.com/JuliaSmoothOptimizers/CUTEst.jl), which already gives a CPU NLPModels interface via Fortran; ExaCUTEst gives the same problems as native Julia ExaModels that can run on GPU backends (CUDA, AMDGPU, oneAPI, Metal) with full automatic differentiation support.
+The [CUTEst](https://github.com/ralna/CUTEst) test set as [ExaModels](https://github.com/exanauts/ExaModels.jl) — on the CPU or on a GPU — with an API that mirrors [CUTEst.jl](https://github.com/JuliaSmoothOptimizers/CUTEst.jl).
 
-## Background
+```julia
+using ExaCUTEst, NLPModels
 
-**CUTEst** (Constrained and Unconstrained Testing Environment with safe threads) is the standard test collection for nonlinear optimization software, originally developed by Gould, Orban, and Toint. Problems are specified in the SIF (Standard Input Format) language:
+nlp = ExaCUTEstModel("ROSENBR")
+obj(nlp, nlp.meta.x0)                       # the NLPModels API, as usual
 
-- N. I. M. Gould, D. Orban, and Ph. L. Toint, *CUTEst: a Constrained and Unconstrained Testing Environment with safe threads for mathematical optimization*, Computational Optimization and Applications 60(3), pp. 545–557, 2015. DOI: [10.1007/s10589-014-9687-3](https://doi.org/10.1007/s10589-014-9687-3)
-- A. R. Conn, N. I. M. Gould, and Ph. L. Toint, *LANCELOT: A Fortran Package for Large-scale Nonlinear Optimization (Release A)*, Springer, 1992.
+nlp = ExaCUTEstModel("READING4", "-param", "N=1000")   # size parameters
+nlp = ExaCUTEstModel("DIXMAANA1"; backend = CUDABackend())   # on the GPU
+```
 
-The CUTEst Fortran/C library is licensed under the **GNU Lesser General Public License v3.0 (LGPL-3.0)**. ExaCUTEst.jl does not copy or wrap any CUTEst source code; it independently reimplements the mathematical problem formulations described in the SIF files using Julia and ExaModels.
+Problems are read from their SIF files by [ExaModelsSIF.jl](https://github.com/madsuite-org/ExaModelsSIF.jl), a SIF front end for ExaModels, so the whole collection is available and each problem arrives as a SIMD-abstracted ExaModel with automatic differentiation on every backend ExaModels supports (CUDA, AMDGPU, oneAPI, Metal).
 
-**CUTEst.jl** (MPL-2.0) provides Julia bindings to the Fortran CUTEst library and is used here as the ground-truth reference for correctness testing:
+## Relationship to CUTEst.jl
 
-- D. Orban and contributors, *CUTEst.jl: Julia interface to CUTEst*, [github.com/JuliaSmoothOptimizers/CUTEst.jl](https://github.com/JuliaSmoothOptimizers/CUTEst.jl)
+CUTEst.jl calls the Fortran CUTEst library: it decodes each SIF file with `sifdecoder`, compiles a shared library, and evaluates through Fortran callbacks on the CPU. ExaCUTEst decodes the same SIF files into ExaModels expression graphs in Julia.
 
-**HS problems** (HS1–HS112) originate from the classic test collection by Hock and Schittkowski:
+| | CUTEst.jl | ExaCUTEst.jl |
+|---|---|---|
+| evaluation | compiled Fortran callbacks | ExaModels SIMD kernels |
+| GPU | no | yes, via `backend` |
+| element type | `Float32`/`Float64`/`Float128` | any, incl. `BigFloat` |
+| build step | `sifdecoder` + gfortran per problem | none |
+| concurrent models | one per name (global decoder state) | unrestricted |
 
-- W. Hock and K. Schittkowski, *Test Examples for Nonlinear Programming Codes*, Lecture Notes in Economics and Mathematical Systems, vol. 187, Springer, 1981.
+What ports directly: the constructor (`CUTEstModel` → `ExaCUTEstModel`), its `-param` arguments, `set_mastsif`, `list_sif_problems`, `generator_sif_problems`, `select_sif_problems` with all its keywords, and the NLPModels interface. `finalize(nlp)` still runs and is simply unnecessary.
 
-**ExaModels.jl** is the symbolic algebraic modeling framework that makes SIMD-parallel evaluation and automatic differentiation possible across CPU and GPU backends:
+Three real differences to know about:
 
-- S. Shin, F. Pacaud, and M. Anitescu, *Accelerating optimal power flow with GPUs: SIMD abstraction of nonlinear programs and its application to stochastic optimal power flow*, in Proc. of the 56th Hawaii International Conference on System Sciences (HICSS-56), 2023.
-- ExaModels.jl repository: [github.com/exanauts/ExaModels.jl](https://github.com/exanauts/ExaModels.jl)
+- **Ordering.** CUTEst reorders variables (nonlinear first) and rows (equality and linear first); a decoded model keeps SIF declaration order. Use `sif_variable_names` and `sif_constraint_names` to map one indexing onto the other — that is exactly what the test suite does to compare the two.
+- **Row linearity.** `nlp.meta.nlin` is `0` for every model, because ExaModels does not classify rows. Use `row_linearity(name)`, which reads it from the decode.
+- **External Fortran.** 34 problems append hand-coded Fortran element/group functions to their SIF file (`external_fortran_problems()`). Two of them, `HS68` and `HS69`, have verified native ExaModels (`native_problems()`) because their Fortran only computes the standard normal CDF, which Julia's `erf` gives exactly; those run on a GPU like any decoded problem. The remaining 32 (`oracle_tier_problems()`) are evaluated through the compiled Fortran, wrapped as ExaModels oracles: CPU only, `Float64` only, and `backend` is refused for them. `external = :error` rejects them instead. Their objective Hessian is reconstructed one Hessian-column at a time (ExaModels' `ScalarNonlinearOracle` takes a Hessian-vector product, not an explicit sparse Hessian), so it costs one Fortran `hprod` per column: 6.3 s against CUTEst.jl's 0.43 s on PARKCH (15 columns) and 63.6 s against 0.03 s on RAYBENDS (2050 columns). Values, gradients, constraints and Jacobians carry no such penalty. With MadNLP, 15 of the 34 solve; the rest exhaust their budget inside a single Hessian (see `runs/oracle_tier_madnlp_2026-10-16.tsv`). Lifting that needs an explicit `hess!` on `ScalarNonlinearOracle` upstream.
 
-ExaCUTEst.jl was developed by Sungho Shin with assistance from [Claude](https://claude.ai) (Anthropic).
+One sharp edge: ExaCUTEst exports the same names as CUTEst.jl, which is what
+makes porting a rename — but it also means that with **both** packages loaded
+Julia leaves the shared names (`list_sif_problems`, `select_sif_problems`,
+`set_mastsif`, `generator_sif_problems`) unbound, and calls must be qualified
+as `ExaCUTEst.select_sif_problems(...)`. Only code comparing the two ever
+loads both.
+
+The library-management functions (`sifdecoder`, `build_libsif`, `clear_libsif`, `manage_libsif`) have no counterpart, because nothing is compiled and no shared library is written.
+
+## Problem collections
+
+The collections are Julia artifacts — the same ones CUTEst.jl v1.4.0 declares, so both packages read byte-identical problem files. `ENV["MASTSIF"]` names the active directory and is honored if set before loading.
+
+```julia
+set_mastsif()                   # "sifcollection", the CUTEst NLP set (1548 problems)
+set_mastsif("maros-meszaros")   # convex QPs
+set_mastsif("netlib-lp")        # LPs
+```
+
+## Selecting problems
+
+```julia
+select_sif_problems(; min_var = 10, max_var = 100, only_linear_con = true)
+select_sif_problems(; objtype = :sum_of_squares)
+filter(is_truly_unconstrained, select_sif_problems())
+```
+
+Selection reads `src/classf.json`, built by `scripts/build_classification.jl`: classification letters from the collection's `CLASSF.DB`, sizes and bound/row-type counts from decoding every problem. Regenerating it needs no Fortran toolchain for the 1509 decodable problems in the table; the other 30 (external Fortran, of the 34 total — 4 are absent from `CLASSF.DB`) take their metadata from the compiled routine.
+
+That table is checked against CUTEst.jl's own Fortran-derived `classf.json` by `scripts/compare_classification.jl`: **identical on all 19 fields across all 1539 problems CUTEst.jl classifies**. Ours covers all 1548 — nine problems (the `BA-L16`/`BA-L52` pairs, `LRCOVTYPE`, the four `MNISTS*`) are absent from `CLASSF.DB` and so unselectable in CUTEst.jl, and are picked up here from their SIF files' own classification lines.
+
+## Correctness
+
+ExaModelsSIF's decoder is validated against the Fortran reference over the entire collection — 1548/1548, comparing values, gradients, constraints, Jacobians and Lagrangian Hessians at two points per problem. A handful of disagreements were adjudicated to reference-side defects, reported upstream as [SIFDecode#55](https://github.com/ralna/SIFDecode/issues/55) and [#56](https://github.com/ralna/SIFDecode/issues/56). This package's own suite (`test/runtests.jl`) covers the wrapper API and re-checks agreement with CUTEst.jl on a sample.
+
+## History
+
+Versions through 0.1 shipped one hand-written Julia file per problem, around 900 of them. Version 0.2 replaced that with the decoder: it covers every problem rather than a subset, and there is no per-problem source to keep in sync with the SIF files.
+
+Two of those hand-written models were kept, in `src/native/`. They are the ones that buy something the decoder cannot: `HS68` and `HS69` use external Fortran that computes only the normal CDF, so a native Julia model is exact and GPU-capable where an oracle is neither. Both were re-validated against the Fortran reference before being kept — objective, gradient, constraints, Jacobian and Lagrangian Hessian at two points, plus CPU-vs-CUDA agreement. A third candidate, `HS67`, was **rejected**: it substitutes closed-form roots for the Fortran's fixed-point iteration and disagrees with the reference in the fourth digit (−868.6357 against −868.7250), so it stays on the oracle tier. The remaining 929 hand-written models covered problems the decoder already handles, and the 19 whose names were not in the collection turned out to be hyphen-renames (`HUES-MOD` as `HUES_MOD`), multi-problem files, or SIF files upstream dropped between collection releases.
+
+## References
+
+- N. I. M. Gould, D. Orban, Ph. L. Toint, *CUTEst: a Constrained and Unconstrained Testing Environment with safe threads for mathematical optimization*, Computational Optimization and Applications 60(3), 545–557, 2015.
+- A. R. Conn, N. I. M. Gould, Ph. L. Toint, *LANCELOT: A Fortran Package for Large-scale Nonlinear Optimization (Release A)*, Springer, 1992.
+- S. Shin, F. Pacaud, M. Anitescu, *Accelerating optimal power flow with GPUs: SIMD abstraction of nonlinear programs and its application to stochastic optimal power flow*, HICSS-56, 2023.
 
 ## License
 
-ExaCUTEst.jl is released under the **MIT License**. See [LICENSE](LICENSE) for details.
-
-The mathematical problem formulations implemented here derive from published academic works (cited above) and the CUTEst SIF problem collection. No CUTEst Fortran/C source code is included or distributed.
-
-## Installation
-
-```julia
-using Pkg
-Pkg.add("ExaCUTEst")
-```
-
-## Usage
-
-Each CUTEst problem is available as a function that returns an [`ExaModel`](https://github.com/exanauts/ExaModels.jl):
-
-```julia
-using ExaCUTEst, ExaModels, NLPModels
-
-# Build on default CPU
-m = rosenbr_model()
-obj(m, m.meta.x0)       # objective at starting point
-grad(m, m.meta.x0)      # gradient
-hess_structure(m)        # (rows, cols) of Hessian sparsity pattern
-hess_coord(m, m.meta.x0, zeros(0))  # Hessian values
-
-# Build for GPU (requires CUDA.jl)
-using CUDA
-m_gpu = rosenbr_model(; backend = CUDABackend())
-
-# Wrap for uniform CPU-side callback access
-mw = ExaModels.WrapperNLPModel(m_gpu)
-obj(mw, m.meta.x0)
-```
-
-### Available problems
-
-| Function | CUTEst name | Variables | Constraints | Notes |
-|----------|-------------|-----------|-------------|-------|
-| `rosenbr_model` | ROSENBR | 2 | 0 | Rosenbrock "banana valley" |
-| `hs5_model` | HS5 | 2 | 0 | H&S #5; sin/cos objective, bounds |
-| `tame_model` | TAME | 2 | 1 | Equality constraint, L2 group type |
-| `alsotame_model` | ALSOTAME | 2 | 1 | Exp objective, sin constraint, bounds |
-| `degdiag_model(N)` | DEGDIAG | N+1 | 0 | Diagonal QP; default N=100000 |
-
-### SIF → ExaModels key conventions
-
-ExaCUTEst encodes SIF semantics as follows:
-
-- **Group scale**: for a group with scale σ and L2 type, contribution = v²/σ (not σ·v²). ROSENBR G1 has σ=0.01 → factor 100.
-- **Default bounds**: variables with no BOUNDS section default to x ≥ 0 in SIF.
-- **Constraint form**: expressed as `g(x) − rhs` with `lcon = ucon = 0` to match CUTEst.jl's residual convention.
-- **QUADRATIC section**: `X X(I) X(I) c` adds 0.5·c·x_i² (Hessian entry convention).
-
-## Testing
-
-```julia
-julia --project=. test/runtests.jl
-```
-
-Tests compare `obj`, `grad`, `cons`, `jac_structure`, `jac_coord`, `hess_structure`, and `hess_coord` against `CUTEstModel` at the starting point, for each registered backend.
-
-## Contributing
-
-To add a new problem:
-
-1. Read the `.SIF` file from [cutest-sif](https://github.com/ralna/SIF) and interpret the group/element structure per `CLAUDE.md`.
-2. Create `src/<NAME>.jl` following the pattern in `src/ROSENBR.jl`.
-3. Include it in `src/ExaCUTEst.jl` and add to the exports.
-4. Add a test in `test/runtests.jl`.
+MIT; see [LICENSE](LICENSE). No CUTEst Fortran or C source is included or distributed. The SIF problem files are distributed by the CUTEst project under their own terms and are downloaded as artifacts.

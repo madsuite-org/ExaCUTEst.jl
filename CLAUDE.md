@@ -1,166 +1,521 @@
-# ExaCUTEst.jl — Developer Guide
+# ExaCUTEst.jl — developer guide
 
-ExaCUTEst.jl converts CUTEst SIF benchmark problems into [ExaModels](https://github.com/exanauts/ExaModels.jl) format, enabling GPU-parallel automatic differentiation on the standard CUTEst test set. It is structured similarly to COPSBenchmark.jl and LuksanVlcekBenchmark.jl.
-
-## Repository layout
+A thin wrapper: it locates SIF problem files, hands them to **ExaModelsSIF**
+for decoding, and presents the result through a CUTEst.jl-shaped API. There is
+no per-problem source here and there should never be again — the decoder
+covers the whole collection, so a hand-written model would only be a second
+thing to keep correct (that is what 0.1 was, and why it was removed).
 
 ```
 src/
-  ExaCUTEst.jl    # module: include + export all problems
-  ROSENBR.jl      # each file = one SIF problem
-  HS3.jl  HS4.jl  HS5.jl  HS9.jl  HS21.jl  HS34.jl
-  TAME.jl  ALSOTAME.jl  DEGDIAG.jl
-  ZANGWIL3.jl  BOOTH.jl  HIMMELBC.jl  HIMMELBD.jl  HIMMELBE.jl
-  RSNBRNE.jl  BT1.jl  ZECEVIC2.jl  EXPFIT.jl  LSQFIT.jl
-test/
-  runtests.jl     # loops over MODELS, compares every callback against CUTEst.jl
-.github/
-  workflows/
-    test.yml      # CI: ubuntu-latest (GitHub-hosted), Julia 1 and lts
+  ExaCUTEst.jl        # module: deps, the external-Fortran name list, exports
+  native.jl           # NATIVE_MODELS registry; native/ holds the models
+  collection.jl       # set_mastsif / list_sif_problems / sif_problem_path
+  classification.jl   # select_sif_problems + classf.json loading
+  classf.json         # generated; do not hand-edit
+  model.jl            # ExaCUTEstModel, -param parsing, name/linearity accessors
+  oracle.jl           # external-Fortran tier (CUTEst-backed ExaModels oracles)
+scripts/
+  build_classification.jl   # regenerates src/classf.json
+test/runtests.jl      # API contract + agreement with CUTEst.jl on a sample
 ```
 
-## How to add a new problem
+## Roadmap (Sungho, 2026-10-16) -- the plan of record
 
-1. Read the `.SIF` file in `~/git/cutest-sif/<NAME>.SIF` and translate using the SIF semantics below.
-2. Create `src/<NAME>.jl` with a function `<lowercase>_model(; T = Float64, backend = nothing, kwargs...)`. Use only the `@add_var`, `@add_obj`, `@add_con` macro forms.
-3. Add it to `src/ExaCUTEst.jl`: `include` + `export`.
-4. Add an entry to the `MODELS` constant in `test/runtests.jl`:
-   ```julia
-   ("<NAME>", b -> <lowercase>_model(; backend = b)),
-   ```
-   The test loop calls `test_cutest_callbacks` on every entry automatically.
+Verbatim: "verify the callbacks for the models with exernal fortran code ->
+port all the fortran code to julia (perhaps in a gpu compatible way) -> verify
+the pure julia version of 32 instances (callback only) -> work on gpu
+compatibility, we want to be able to create a model with scalar indexing
+disabled, and callbacks are verified against cpu impl (over all 15k
+instances) -> the full verification again (on cpu, gpu, differenet
+precisions) to make sure we have correct impl -> done!"
 
-See `src/ROSENBR.jl` as the simplest example, `src/TAME.jl` for equality constraints, `src/ALSOTAME.jl` for nonlinear constraints, and `src/DEGDIAG.jl` for a large scalable problem with DO/OD loops.
+1. **Verify the oracle callbacks. DONE 2026-10-16: 32/32 ASSEMBLY_OK, no
+   mismatches** (`test/oracle_assembly.jl`,
+   `runs/oracle_assembly_2026-10-16.tsv`). Verifies our ASSEMBLY of the
+   Fortran, not the Fortran: sparsity patterns, obj_weight/multiplier
+   conventions, the Lagrangian Hessian split between the scalar and vector
+   oracles. Comparing against CUTEst.jl cannot confirm the Fortran (both call
+   it) but the wiring is ours and can be wrong; it isn't.
+   Hessians are compared as Hessian-VECTOR products (Sungho: "for those just
+   use hessian vectors") with three random directions at each of two points,
+   plus the full matrix wherever it is cheap to materialize. That is what made
+   BA-L52 checkable at all -- 192627 variables, where the full matrix would
+   mean ~192k Fortran calls. Caveat: three directions is a sample, so a wrong
+   row orthogonal to all six probes would slip through.
+2. **Port all 32 external-Fortran problems to Julia.** THE SHAPE MATTERS, and
+   getting it wrong cost a day: the port is a **generic Julia function**
+   interfaced to ExaModels as an **external oracle**, NOT an ExaModels
+   expression (Sungho 2026-10-16: "it should be a generic julia function" ...
+   "this generic julia function can be interfaced with ExaModels as an
+   external oracle"). Building the BA reprojection as a symbolic expression
+   inside a SIF element did not finish compiling in an hour on a
+   57-VARIABLE problem, because ExaModels nests a type parameter per
+   operation and the chain is ~30 deep; the same computation as a plain
+   function builds the model in 0.3-7 s. A generic function also evaluates in
+   Float64/Float32/BigFloat with no extra code (step 5 for free) and, being
+   allocation- and branch-free, is callable from a GPU kernel (step 4).
+   Derivatives come from AD over the one function, so the Fortran's
+   hand-coded G/H arrays are never ported -- the error class that made the
+   legacy HS67 port wrong in the 4th digit.
+   **BA-L* family DONE 2026-10-16: 12/12, all callbacks match the Fortran**
+   (`src/native/BA.jl`, `test/ba_verify.jl`,
+   `runs/ba_verify_2026-10-16.tsv`). Oracle tier 32 -> 20.
+3. **Verify the pure-Julia versions against the Fortran callbacks** -- this
+   one IS independent, unlike step 1, because the two implementations are
+   genuinely different. It is what caught HS67. **DONE: 34/34 PASS over 602
+   checks** (`test/native_verify.jl`). Coverage is uneven by construction and
+   the per-problem check count says how: 23 where the reference can
+   adjudicate every callback, 19 where its Hessian cannot, 17 where its first
+   derivatives cannot either, 11 for BLEACHNG where only its objective can,
+   and 9 where the Hessian-coordinate path is out of reach at that size.
+4. **GPU compatibility.** Acceptance criterion, stated concretely: a model
+   must be constructible with **scalar indexing disabled**
+   (`CUDA.allowscalar(false)`), and its callbacks verified against the CPU
+   implementation **over the whole collection**, not a sample. ("15k" in the
+   dictation is 1.5k, i.e. the 1548 problems.)
 
-## Always use macro syntax
+   Done for 24 of the 34: the 12 `BA-L*` (`src/native/BA_gpu.jl`), JIMACK
+   (`JIMACK_gpu.jl`), `HS67`/`HS85`/`HS88`-`HS92` (kernels in their own
+   files), and inherent for the two constant-folded families (`HS68`/`HS69`,
+   `VANDANIUM*`), which are ordinary SIMD ExaModels. Each has a
+   `test/*_gpu_verify.jl` beside it.
 
-Always use the ExaModels macro forms — these are the first-class API:
-```julia
-ExaModels.@add_var(c, x, N; lvar = ..., uvar = ..., start = ...)
-ExaModels.@add_par(c, θ, data)               # named parameter array (θ[i] usable in loops)
-ExaModels.@add_obj(c, expr)                  # scalar term
-ExaModels.@add_obj(c, expr for i in iter)    # sum over loop
-ExaModels.@add_con(c, expr)                  # scalar constraint
-ExaModels.@add_con(c, expr for i in iter)    # vectorised constraints
+   **All 34 now have a GPU path.** Every one has a `test/*_gpu_verify.jl`
+   beside it running three comparisons: the device against the same kernels on
+   KernelAbstractions' `CPU()` backend (which isolates the device rather than
+   comparing two algorithms), the host kernels against the Fortran-verified
+   host port (the chain to the reference), and the assembled `hess_coord`
+   against `hprod` (the only reading that touches the coordinate path -- it
+   caught a 92%-wrong Hessian on BA and a 96%-wrong one on RAYBENDS, both
+   while `hprod` read exact).
+
+   SARO and SAROMM are the instructive case, because the obvious shape is
+   excluded by arithmetic rather than by taste. A plain nested-dual Hessian
+   needs 508 KB of local memory per thread against the 512 KB a thread may
+   have on CC 7.0; the per-column shape fits and spills 86 KB; one thread per
+   (stage, lower-triangle PAIR) costs six times the arithmetic and runs seven
+   times faster, because at this depth spill traffic dominates. Registers pin
+   at 255 in every shape, so **spill bytes, not register count, is the number
+   that discriminates**. Forcing the RK4 copies inline made both compile time
+   and spill worse on the device, agreeing with the host measurement that put
+   `@noinline` there.
+
+   WHETHER A PORT NEEDS AN ELEMENT-TYPE GATE DEPENDS ON ONE THING: whether any
+   of its kernels uses `KernelAbstractions.@atomic`, which has no
+   implementation for a non-bits type and so fails at `T = BigFloat` even with
+   `backend = nothing`, since the kernels run through KA's CPU backend either
+   way. A scatter into a shared slot needs atomics (BA's objective gradient,
+   JIMACK's `grad`/`hvp`), so those route on `isbitstype(T)` to the host-loop
+   builder -- see `_ba_model` and `_jimack_model`. Where every item is written
+   by a single thread (the HS kernels, JIMACK's `hess!`), no atomics and no
+   gate are needed and all three precisions work through the kernel builder.
+   BigFloat is how a Float64 result gets arbitrated, so the fallback is not
+   optional.
+
+   THE TWO WORKED EXAMPLES CHOSE DIFFERENT HESSIAN PATTERNS and both are
+   defensible, so state the choice rather than copying one: BA declares the
+   deduplicated union, JIMACK blockwise with duplicates (259200 against the
+   host builder's and CUTEst's 118824) so that `hess!` is a pure disjoint
+   write needing no atomics, which is what makes it bitwise reproducible
+   across backends. `nnzh` therefore depends on the element type for JIMACK
+   while the assembled Hessian does not. `test/native_verify.jl` compares
+   Hessians as assembled symmetric matrices, which is pattern-independent and
+   so adjudicates either choice.
+
+   They all have the same shape -- map a generic function over N independent
+   items (observations, collocation rows, finite elements, RK4 stages,
+   estimation-sample records) and scatter the results -- so one abstraction
+   should serve them, and `BA_gpu.jl` is what it would be extracted from. It
+   is NOT extracted yet, deliberately: one instance is not enough to tell
+   which parts are general. The dimensions that actually vary are the
+   elemental-variable count per item (12 BA, 24 JIMACK, 11 SARO and COLLOC,
+   8 RAYBENDS), whether an item yields one value or several (SARO's stage
+   gives 11 rows), and whether the scatter needs atomics (an objective
+   gradient does; disjoint row writes do not). Port a second one bespoke
+   before generalizing.
+
+   One thing the acceptance criterion settles: a problem with three variables
+   still needs kernels. Running a host callback against device arrays requires
+   scalar indexing, so "accepts a backend" and "scalar indexing disabled" are
+   the same requirement, and the small problems are not exempt. For AKIVA,
+   HIELOW, PARKCH and STRATEC the work is worth it anyway -- their variable
+   count is tiny but the reduction runs over an estimation sample of tens of
+   thousands of records.
+5. **Full verification again**: CPU, GPU, and multiple precisions.
+   SARO and SAROMM divide by the Fortran's regulariser 1.16111111111111e-27
+   alone in every stage, and ForwardDiff's quotient rule squares it, which
+   underflows to zero in Float32 (1.35e-54 is normal in Float64). `_saro_quot`
+   (`src/native/SARO.jl`) takes that one quotient over Float64 when the duals
+   are over Float32, so Float32 derivatives are finite while Float64 takes the
+   plain division and stays bit-exact against the Fortran.
+
+Until step 2 lands, GPU verification stays out of scope (see below) and
+solver testing is explicitly NOT wanted: "solve is not a too much concern
+now; don't run solver testing" (2026-10-16). Partial solver results from the
+sweep that was stopped are in runs/solve_results.s*.tsv -- 1050 of 1516
+problems, kept for reference, not a deliverable.
+
+## Readiness priorities (Sungho, 2026-10-16)
+
+GPU verification across the collection is **deliberately not a goal at this
+stage**: "I don't think it's needed at this stage; it's gonna be easy once we
+complete the cpu impl". 15 problems are GPU-verified (13 in
+ExaModelsSIF's test/gpusmoke.jl plus the two native models) and that is
+enough of a smoke test. Do not spend compute on a full GPU build sweep, and
+do not list it as an outstanding gap.
+
+Solver testing is NOT wanted at this stage either (2026-10-16). The
+oracle tier's Hessian cost -- an explicit `hess!` on ExaModels'
+`ScalarNonlinearOracle`, measured as taking RAYBENDS' Hessian from 63.6 s to
+~32 ms -- mattered only for solvability, so it is parked. Porting those
+problems to Julia (roadmap step 2) removes the oracle Hessian problem
+entirely rather than optimizing it, which is the better reason to prefer the
+port.
+
+## Two traps that cost real time on 2026-10-16
+
+- **Any script that builds CUTEst models must hold the pidlock**
+  (`mkpidlock("/tmp/cutest-decode.pid"; wait = true)`). CUTEst decodes and
+  compiles every problem into ONE shared directory, so concurrent builds
+  collide and report `Unable to compile a shared library for the problem` --
+  which reads exactly like a broken problem and is not. Step 1 reported that
+  for BA-L21LS, BA-L49, BA-L49LS and BA-L52; under the lock all four are
+  ASSEMBLY_OK.
+- **BA-L52 and BA-L52LS take ~1035 s to COMPILE** (the others in the family
+  take 6-8 s). Any sweep with a per-problem process timeout under ~20 minutes
+  records them as timeouts, which is what made them look unsolvable in the
+  solver board. Budget for the build separately from the solve.
+  Worth stating as a correction: a "BA-L52 cannot be built, reproduced in
+  isolation" claim was recorded here earlier and was WRONG -- that probe ran
+  while step 1 was concurrently using the shared compile directory, i.e. it
+  failed to control for the very confound named in the bullet above.
+
+## The native tier (src/native/)
+
+A hand-written model lives here for every problem the decoder refuses, i.e.
+every SIF that appends external Fortran. All 34 of them are here, so
+`oracle_tier_problems()` is empty and nothing in the collection evaluates
+through compiled Fortran.
+
+THE SHAPE OF A PORT FOLLOWS WHAT THE FORTRAN DEPENDS ON, and the choice is
+not a judgement call per problem:
+
+- Depends only on element PARAMETERS: evaluate it in Julia at build time and
+  constant-fold the result into the group's `lin`. The model is then an
+  ordinary SIMD ExaModel and accepts a `backend` (`HS68`/`HS69`, whose Fortran
+  is the normal CDF; `VANDANIUM`, whose `BSPLINE` reads only parameters).
+- Depends on the VARIABLES: a generic Julia function behind an ExaModels
+  oracle, with derivatives from ForwardDiff. NOT an ExaModels expression --
+  ExaModels nests a type parameter per operation, so a ~30-operation chain
+  does not finish compiling.
+
+Never port the Fortran's hand-coded `G`/`H` arrays. Derivatives come from AD.
+Porting them is what made the legacy `HS67` wrong in the fourth digit: it
+swapped the Fortran's fixed-point iteration for closed-form roots, so its
+derivatives were those of the exact fixed point rather than of the finite
+iteration the problem actually defines.
+
+VALIDATE THROUGH `ExaCUTEstModel`, NOT THROUGH THE PORT'S OWN CONSTRUCTOR.
+`test/native_verify.jl` does this for all 34 and is the comparison that
+belongs to the package: a port can be correct and still be reached by the
+wrong name, with the wrong default, or not at all. Writing it found two
+defects that every per-port script had passed over. `HS68`/`HS69` had been
+indexed in the REFERENCE's variable order rather than the SIF's for as long
+as they existed, so `sif_variable_names` named the wrong variable for exactly
+those two -- invisible at `x0`, where all four variables are 1.0, and
+invisible in the objective, which does not involve `X2`. And the `BA-L*LS`
+models assembled a Hessian 92% wrong while `hprod` was exact, because
+`hprod` never reads the coordinate path.
+
+`element_hessian`, `ref_param_rounding`, `single` and `fortran_literals`
+select between READINGS of the Fortran, so they are part of the model's
+identity. `ExaCUTEstModel` forwards them; an unknown keyword raises a
+MethodError naming it rather than being ignored.
+
+Never put a DECODABLE problem here. The decoder is validated over the whole
+collection; a hand-written duplicate would just be a second thing to keep
+correct, which is exactly what 0.2 removed.
+
+## Division of labour
+
+- **ExaModelsSIF** owns SIF semantics and is deliberately CUTEst-free: no
+  dependency on CUTEst.jl, no Fortran toolchain, no package extension. It
+  decodes, or raises `ExternalFortranError`.
+- **ExaCUTEst** owns everything CUTEst-facing: the collection artifacts, the
+  CUTEst.jl-compatible API, and the oracle tier for problems ExaModelsSIF
+  refuses. CUTEst.jl is a plain dependency here (Sungho, 2026-10-14: the
+  oracle tier "is not extension, it should be a separate repo").
+
+A decoder fix belongs upstream in ExaModelsSIF. Only API shape, selection and
+the oracle tier belong here.
+
+## Things that will bite you
+
+- **`nlp.meta.nlin` is 0 for every model.** ExaModels does not classify row
+  linearity. `row_linearity(name)` reads it from the decode instead; the
+  classification builder uses that, not `meta`. Verified on HS14 (1 linear,
+  1 nonlinear) and HS35.
+- **Ordering differs from CUTEst's.** CUTEst reorders variables and rows; a
+  decoded model is in SIF declaration order. Any comparison against CUTEst.jl
+  must permute by SIF name (`sif_variable_names`, `sif_constraint_names`);
+  comparing positionally will look like a decoder bug and is not one.
+- **One live Fortran model per problem name.** `cutest_oracle_model` caches
+  its `CUTEstModel` in `_ORACLE_REFS`, because the oracle closures keep it
+  open for the model's whole life and a second construction of the same
+  problem otherwise dies with `CUTEstException(1, "memory allocation
+  error")`. Measured: a repeat failed, ten different problems in a row were
+  fine, and an earlier model kept evaluating correctly after a later one was
+  built -- so it is specifically a repeat, not cross-contamination. The same
+  omission (not finalizing) is what cost `scripts/build_classification.jl`
+  two entries. `clear_oracle_cache()` releases the handles.
+- **The oracle tier's objective Hessian costs one Fortran `hprod` per Hessian
+  column, and that is what makes most of these problems unsolvable.**
+  `ScalarNonlinearOracle` accepts `hvp!`, not an explicit sparse Hessian, so
+  ExaModels reconstructs the objective block column by column (ExaModels
+  `src/oracle.jl`, the `scalar_oracles` loop in `hess_coord!`). Measured
+  2026-10-16, one Hessian evaluation, oracle versus CUTEst.jl's single call:
+
+  | problem | hess cols | CUTEst | oracle | hprod x cols |
+  |---|---|---|---|---|
+  | PARKCH | 15 | 425 ms | 6.34 s | 9.25 s |
+  | BLEACHNG | 17 | 504 ms | 8.55 s | 8.53 s |
+  | RAYBENDS | 2050 | 31.6 ms | 63.6 s | 62.0 s |
+
+  The oracle cost tracks `hprod x ncols`, which is what identifies the
+  mechanism rather than merely correlating with it. RAYBENDS' single Hessian
+  exceeds a 60 s solver budget, so it reports zero iterations; an explicit
+  `hess!` would take it from 63.6 s to ~32 ms. Note PARKCH and BLEACHNG are
+  ALSO intrinsically slow (one hprod is ~0.5 s), so both factors are real --
+  do not attribute everything to the reconstruction. Constraint Hessians go
+  through `hess!` in one call and are unaffected. The fix is upstream, a
+  `hess!` on `ScalarNonlinearOracle`, not a workaround here.
+- **Solver results for the oracle tier are archived** in
+  `runs/oracle_tier_madnlp_2026-10-16.tsv`: MadNLP solves 15 of the 34, four
+  exhaust a 60 s budget, 14 are killed inside a single evaluation at 260 s,
+  and VANDANIUMS reports infeasible. Re-run with
+  `scripts/solve_oracle_tier.sh` -- one process per problem with a hard
+  timeout, because a first attempt that ran them in one process wedged on
+  BA-L16LS and produced nothing in two hours.
+- **The oracle tier cannot take a `backend`.** Opaque Fortran callbacks have
+  no expression graph to vectorize. The constructor refuses the combination
+  rather than silently building a CPU model.
+- **Validating the oracle tier against CUTEst.jl is circular** — both sides
+  call the same compiled routine. The census records those 34 as
+  `ORACLE_TIER`, not `PASS`; the claim is that they build and evaluate, not
+  that their derivatives are independently confirmed.
+- **Our exports collide with CUTEst.jl's** (`list_sif_problems`,
+  `select_sif_problems`, `set_mastsif`, `generator_sif_problems`). That is
+  intentional — same names are what make porting a rename — but with both
+  packages loaded Julia binds neither, and the error reads
+  `UndefVarError: list_sif_problems not defined`, which looks like a missing
+  export and is not one. The test suite imports explicitly for this reason.
+- **Never hardcode an artifact's inner directory name.** These artifacts wrap
+  their files in a release-named directory that changes between releases.
+  Copying `optrove-maros-meszaros-9adfb5707b1e` from an older CUTEst.jl gave a
+  path that does not exist, and `mastsif()` then fell back to the default
+  collection, so `set_mastsif("maros-meszaros")` silently served the 1548
+  NLP problems — a wrong answer whose only symptom was a plausible count.
+  `_sif_dir` discovers the directory and refuses on ambiguity; `mastsif()`
+  errors on a set-but-invalid `MASTSIF` rather than falling back.
+- **Two collections exist and differ.** The active artifact is CUTEst.jl
+  v1.4.0's `sifcollection` (1548 problems); v1.3.8's had 1540, and some shared
+  problems differ in content (EQC, READING4). Pin deliberately when comparing
+  results across time.
+
+## Regenerating the classification table
+
+Two guards exist because both failures already happened once:
+
+- The script **refuses to write a partial table.** An earlier run wrote 1537
+  of 1539 entries and reported the shortfall only as `(2 skipped)` in a
+  trailing line, while the field-by-field comparison got *better* (the two
+  lost problems were the only two that disagreed). A missing entry reads as
+  "that problem is not in the collection", which is worse than a wrong field.
+- It **cross-checks decode-derived metadata against fully built models** on a
+  sample, all 11 fields, and errors if fewer than 10 problems were checked.
+  That is the only thing that would catch `conbounds`/`varclasses` drifting
+  from builder.jl.
+
+The two problems it lost were `BA-L21` and `BA-L21LS`, and they build fine in
+isolation: the cause was this script not finalizing its `CUTEstModel`s, so
+the Fortran decoder's global state tripped up *later* constructions. If
+oracle-tier entries start disappearing again, suspect finalization before
+suspecting the problems.
+
+
 ```
-Never use the functional forms (`add_var`, `add_obj`, `add_con`, `add_par`).
-
-Use `@add_par` when a loop expression needs to index into a fixed data array (e.g., observation
-data Xi, Yi). The named parameter `θ` is then accessible as `θ[i]` inside `@add_obj`/`@add_con`
-generators. See `src/LSQFIT.jl` for an example.
-
-## CI structure
-
-| Job | Runner | Backends tested |
-|-----|--------|-----------------|
-| `cpu` | `ubuntu-latest` (GitHub-hosted) | `nothing`, `CPU()` |
-| `gpu` | `self-hosted, cuda` | `nothing`, `CPU()`, `CUDABackend()` |
-
-The test runner uses `CUDA.functional()` to auto-detect GPU availability, so the same `test/runtests.jl` works for both jobs.
-
-## Test pattern
-
-Every problem in `MODELS` is tested by `test_cutest_callbacks(name, build_model)` which:
-1. Loads `CUTEstModel(name)` as ground truth.
-2. For each backend, builds the ExaModel, wraps it with `ExaModels.WrapperNLPModel` (which moves GPU outputs back to CPU), then checks:
-   - `nvar`, `ncon` match CUTEst
-   - `x0`, `lvar`, `uvar` match CUTEst (atol=1e-10)
-   - `lcon`, `ucon` match CUTEst (when ncon > 0, atol=1e-10)
-   - `obj`, `grad`, `cons` at the starting point match CUTEst (atol=1e-10)
-   - `jac_structure` + `jac_coord`: assembled sparse Jacobian matches CUTEst (norm < 1e-10)
-   - `hess_structure` + `hess_coord`: assembled sparse Hessian matches CUTEst (norm < 1e-10)
-
-## SIF format — key semantics
-
-### Group structure
-
-Every SIF group defines either an objective term (N type) or a constraint (E/L/G type). The group value is:
-
-```
-v_g = linear_part(x) + element_contributions(x) - constant_rhs
+julia --project=. scripts/build_classification.jl    # ~1548 decodes
 ```
 
-If a `'SCALE'` σ is given, the **group function** receives `v_g / σ` and the full contribution is `σ · φ(v_g / σ)`:
+Classification letters come from `CLASSF.DB` inside the collection artifact;
+sizes and bound/row-type counts come from decoding each problem, because
+`CLASSF.DB` records `V` wherever a size is a `$-PARAMETER`.
 
-For GROUP TYPE `L2` (φ(u) = u²): `contribution = σ · (v/σ)² = v²/σ`.
+## Testing
 
-Examples:
-- ROSENBR G1: σ=0.01, v = x2 − x1²  →  contribution = (x2−x1²)² / 0.01 = **100(x2−x1²)²** ✓
-- HS3 G2: σ=100000, v = x2−x1  →  contribution = (x2−x1)² / 100000 = **10⁻⁵(x2−x1)²** ✓
-
-### Variable bounds default
-
-When a SIF problem has no BOUNDS section (or no entry for a variable), the default is **x ≥ 0** (not free). A `FR` bound makes a variable free. Set `lvar` accordingly; see TAME for an example.
-
-### Constraint convention (matching CUTEst)
-
-CUTEst.jl reports constraint values as `g(x) − b = 0` (residual form). Encode ExaModels constraints the same way so the values match:
-```julia
-ExaModels.@add_con(c, expr - rhs)   # lcon=0, ucon=0 by default → equality
 ```
-For inequality groups (L type ≤ 0, G type ≥ 0), set `lcon`/`ucon` appropriately.
+julia --project=. -e 'using Pkg; Pkg.test()'
+```
 
-### GROUP TYPE functions
+Needs gfortran, since the agreement layer builds real `CUTEstModel`s. The
+decoder's own validation over the collection lives in ExaModelsSIF
+(`test/valsweep.jl`); the collection-wide verification of this package, on
+CPU and GPU in both precisions, is `test/collection/` (below).
 
-| SIF type | F(v) | contribution with scale σ |
-|----------|------|--------------------------|
-| L2 / SQUARE | v² | v²/σ |
-| CUBE | v³ | v³/σ |
-| SINE | sin(v) | sin(v)/σ |
-| COS | cos(v) | cos(v)/σ |
-| EXP / EXPN | exp(v) | exp(v)/σ |
+`test/native_verify.jl` compares every native model against the Fortran it
+replaces, through `ExaCUTEstModel`:
 
-Contribution formula: `F(v)/σ` where `v` is the raw group value and `F` is the type function.
-Without a GROUP TYPE the function is the identity (F(v) = v), i.e., contribution = v for objective groups (scale ignored).
+```
+julia --project=. test/native_verify.jl            # all of native_problems()
+julia --project=. test/native_verify.jl CAR2 SARO  # or a subset
+```
 
-**IMPORTANT — Identity-type constraints with SCALE:** For **constraint** groups (E/L/G type) with no GROUP TYPE and a SCALE σ, CUTEst reports the constraint residual as `v/σ`, NOT `v`. Encode these as `(expr - rhs) / σ`. See CUBENE: SQ(2) has SCALE=0.1, so constraint value = `(X(2) - X(1)^3) / 0.1`.
+Rows append to `runs/native_verify.tsv`. Its tolerance table carries the
+mechanism for every entry above 1e-12, and where a derivative is compared
+against something other than the reference's own, the mode records why the
+reference cannot serve: five problems in the collection -- BLEACHNG, CAR2,
+ORBIT2, SARO, SAROMM, all five external-Fortran -- carry a `1` in the fourth
+classification field, meaning the SIF supplies first derivatives only, and
+three more (HS67, HS85, BLEACHNG) have analytic first derivatives that
+contradict their own values. Those are adjudicated against a central
+difference of the lowest derivative that is trustworthy. No tolerance is
+loosened to cover a disagreement.
 
-### Variable ordering when loop starts from 0
+`test/*_gpu_verify.jl` compares each GPU-capable native model against the same
+kernels on KernelAbstractions' `CPU()` backend and against the Fortran-verified
+host port:
 
-When a SIF VARIABLES section declares variables starting from index 0 (e.g., `DO I 0 N+1, X X(I), ND`), CUTEst's sifdecoder produces a **rotated** free-variable ordering:
-- X(N) → position 1 (last free variable wraps to front)
-- X(1) → position 2, X(2) → position 3, ..., X(N-1) → position N
-- Formula: `X(I)` maps to Julia index `mod(I, N) + 1` for I=1..N
-- Fixed variables (XX) still go to positions N+1, N+2 in declaration order
+```
+julia --project=. test/jimack_gpu_verify.jl   # and ba, hs, colloc, raybends, logit, saro
+```
 
-This rotation occurs because sifdecoder moves the first-declared variable (X(0)) to the end, shifting all subsequent variables down; the last free variable wraps to position 1. See ARTIF, BDVALUE, BDVALUES for examples.
+CUDA is deliberately NOT a dependency of this package, so the package
+environment cannot resolve `using CUDA`. `test/gpu` is an environment that can,
+and each script switches to it (`test/gpu/activate.jl`). It is a **workspace
+member** of the package environment -- `[workspace]` in Project.toml -- so both
+share one Manifest.toml and resolve every package in common to one version. A
+CUDA installed in some other environment is not resolved against this one, and
+any CUDA predating LLVM.jl 10 fails to precompile against it with
+`UndefVarError: IRBuilder`.
 
-### Constraint ordering
+`test/gpu/LocalPreferences.toml` holds `CUDA_Runtime_jll` and
+`CUDA_Compiler_jll` at 12.9. The default runtime has dropped compute capability
+7.0, which is what the Quadro GV100 is, so without the preference CUDA refuses
+the device. Setting it is a statement about the hardware, not about the
+compiler stack: nothing pins LLVM.jl or GPUCompiler.
 
-CUTEst's sifdecoder does not always preserve the SIF GROUP section order for constraints:
-- Groups without elements (purely linear) may appear **before** groups with elements.
-- Always verify constraint ordering empirically: run `NLPModels.cons(CUTEstModel(name), x0)`
-  and confirm which formula matches each cons[i]. See RSNBRNE (G2 before G1) and HIMMELBE
-  (G3, G2 before G1).
+Set `<FAMILY>_GPU_BACKEND=cpu` to compare the two host paths alone, which is
+all a machine without a GPU can do. The `gpu/host` rows are then vacuous by
+construction and read exactly 0.0; only `host/port` and `hess_vs_hprod` carry
+information. The TSV's `device` column records which backend produced a row.
 
-### ELEMENT TYPE
+Needs ExaModels `sif-integration` at 555b4ed9 or later: earlier revisions have
+no `hess!` on `ScalarNonlinearOracle` (so a repeated Hessian pattern assembles
+wrong), allocate the oracle cache buffers as Float64 regardless of the model's
+element type (so a non-Float64 oracle model's derivatives carry only Float64
+precision), and skip scalar oracles in the KernelAbstractions overrides (so an
+oracle objective's Hessian is exactly zero on a GPU backend).
 
-Element types define nonlinear functions of one or more variables. The element value is added (with a coefficient) to the group's nonlinear part. Common elements:
-- `SQ(V1)` = V1²  (coefficient in GROUP USES is the multiplier)
-- `EXP(V1)` = -exp(V1)  (note sign: F=-exp in HS34)
-- `EXPIH(V,W; RI)` = V*exp(W*0.25*RI)  (EXPFIT parametric element)
+### Collection verification (`test/collection/`)
 
-For elements with **IV** (internal variables), expand the IV definition: e.g., `IV U = X + Y`
-means U = X + Y, so `F = 0.25*U²` → `F = 0.25*(X+Y)²` (see HIMMELBE).
+Every problem of `list_sif_problems()`, through `ExaCUTEstModel`, in four
+configurations, at `x0` and a seeded displaced point `xp`:
 
-### QUADRATIC section
+| configuration      | test                  | reference              |
+|--------------------|-----------------------|------------------------|
+| `cpu64_vs_fortran` | CPU Float64           | CUTEst's Fortran (pilot.jl / native_verify.jl rules) |
+| `gpu64_vs_cpu64`   | CUDA Float64          | CPU Float64            |
+| `gpu32_vs_cpu32`   | CUDA Float32          | CPU Float32            |
+| `cpu32_vs_cpu64`   | CPU Float32           | CPU Float64            |
 
-Entries `X X(I) X(J) coeff` add **0.5 × coeff × x_i × x_j** to the objective (Hessian convention). A diagonal entry `X(I) X(I) 1.0` → **0.5 × x_i²**, not **x_i²**. See DEGDIAG.
+Value callbacks compared: `obj grad cons jac_coord jac_asm hess_coord hess_asm
+hprod`; structures must match exactly. It runs in the `test/gpu` environment,
+on several hosts at once, all sharing one run directory `CV_RUN` on a
+filesystem with working `flock` across hosts (NFSv4):
 
-### DO/OD loops and parameter arithmetic
+```
+export CV_RUN=/path/on/nfs/run1 JULIA=~/.juliaup/bin/julia
+C=test/collection
+$JULIA --project=test/gpu $C/prepare.jl        # population.tsv, provenance.txt, device check (GPU host)
+$C/sigscan.sh 16                               # sigs.tsv (or copy a previous run's: it depends only on the decoders)
+python3 -I $C/plan.py $CV_RUN 4 --prev <previous run> --big-shards 3,2
+# on each host, detached; GPUSPEC = worker:shardfile:device
+CV_RUN=$CV_RUN setsid nohup $C/launch_host.sh 40 gpu0:shards/shard_gpu0.txt:0 gpu1:shards/shard_gpu1.txt:1 &
+CV_RUN=$CV_RUN setsid nohup $C/launch_host.sh 24 gpu2:shards/shard_gpu2.txt:0 gpu3:shards/shard_gpu3.txt:1 &
+# on one GPU host: waits for the listed hosts, retries GPU OOMs, writes results/report.txt
+CV_RUN=$CV_RUN setsid nohup $C/finish.sh <host1> <host2> &
+```
 
-Scalable SIF problems use DO/OD loops with integer parameters (IE) and real arithmetic (RE, RI, RA, R/). Replicate these in Julia with `[expr for i in range]`. See DEGDIAG for how to compute `lvar = T[i/(N+1) for i in 0:N]`.
+`state/FINISHED` marks completion; `python3 -I $C/analyze.py $CV_RUN` re-derives
+the report from the rows at any time, including mid-run. Two things keep the
+run tractable and correct:
 
-Note: DEGDIAG lvar comparison with CUTEst requires `rtol=1e-10` rather than `atol` because Fortran integer-to-float conversion in sifdecoder introduces tiny rounding differences vs Julia.
+- **Signature-affinity sharding.** GPU time is dominated by compiling each
+  distinct ExaModels block signature once per process, so `plan.py` places
+  problems that share signatures in the same long-lived device worker. Within
+  a shard problems run smallest first; with `--prev`, the largest and
+  previously OOM or slow problems go to `--big-shards` (the devices with the
+  most free memory). CPU workers on every host draw from one shared queue,
+  longest first.
+- **The CUTEst lock.** CUTEst decodes and compiles every problem into one build
+  directory (`CUTEst.libsif_path`), and concurrent builds there corrupt each
+  other. Every `CUTEstModel` construction, on every host, holds an exclusive
+  flock on `CV_CUTEST_LOCK` (default `$CV_RUN/cutest.lock`). Nothing else may
+  build CUTEst problems against the same depot while a run is going.
 
-## SIF feature conversion difficulty
+Each problem is bounded by `CV_TIMEOUT` (3600 s); a timeout, OOM kill, or crash
+is recorded in `results/deaths.tsv` with the phase it hit, and the worker
+restarts after it. `provenance.txt` records the commit or tree hash of every
+package under test; the run measures whatever those paths hold, so leave them
+untouched until it ends (a dedicated worktree is the simple way).
 
-| Feature | Difficulty | Examples |
-|---------|-----------|---------|
-| Fixed-size, simple group types | Easy | ROSENBR, HS5, TAME, ALSOTAME |
-| Scalable DO/OD loops | Medium | DEGDIAG, GOFFIN |
-| Element types with multiple variables | Medium | HS1, many HS problems |
-| Parameter arithmetic (RI/RA/R/) | Medium | DEGDIAG bounds |
-| TEMPORARIES in elements/groups | Hard | ALSOTAME (sin/exp) |
-| QUADRATIC section | Medium | DEGDIAG |
-| RANGES for inequality constraints | Easy | most HS problems |
+**Verdicts**, per problem and configuration: `PASS`; `PASS_CONDITIONED`
+(passes, but some reading exceeds the ulp threshold and is attributed to
+conditioning, below); `FAIL`; `FIXED_ERROR` (a failure with the fixed-error
+signature, below); `ZERO_REF` (listed exception, below); `TIMEOUT`;
+`RESOURCE` (GPU OOM or host OOM kill); `SKIPPED` (nothing non-trivial to
+compare); `NOT_RUN`.
+
+**Criterion.** A reading's error is `max|test - ref| / (eps(T) * S)` ulp, with
+`T` the lower precision of the pair and `S` the largest finite `|ref|` that
+quantity reaches over both points. A reading passes at <= 1000 ulp. Above
+that, the GPU configurations look at the precision ratio
+
+    r = ulp(gpu32_vs_cpu32) / ulp(gpu64_vs_cpu64)
+
+for the same problem and callback, each in its own eps units. Error that comes
+from conditioning scales with each precision's rounding, so `r` is O(1); an
+error that is a fixed wrong value is the same in both precisions, so
+`r = eps64/eps32 = 1.86e-9`. Hence:
+
+- `r` in `[1e-5, 1e4]` -> `PASS_CONDITIONED`; outside, or `r` not formable
+  (either side missing, exactly zero, or non-finite) -> `FAIL`. The absence
+  of the discriminator is not evidence of conditioning.
+- Whatever the ulp, `r < 1e-6` with a Float64 error >= 10 ulp ->
+  `FIXED_ERROR`. The 10-ulp floor matters: a Float64 difference under one ulp
+  against a near-exact Float32 comparison (MISRA1CLS and LIN `hprod`, 0.7
+  ulp) gives an arbitrarily small `r` that means nothing.
+
+The bounds come from the collection on the GV100s: readings above 1000 ulp
+have `r` between 1.2e-4 (DALLASM `hprod`) and ~2e2 (CHARDIS12 `obj`, Float32
+configuration); among readings with a Float64 error of 10 ulp or more,
+nothing lies between 1.86e-9 and 1.2e-4. The lower bound sits a decade under
+DALLASM. A device Hessian whose diagonal is off by a constant amount (the
+VANDERM1-4 defect in ExaModels' device Hessian) reads `r = 1.86e-9` and comes
+out `FIXED_ERROR`: that is the case the window must never pass.
+
+`cpu32_vs_cpu64` stays on the plain 1000-ulp threshold; its ratio against
+`gpu64_vs_cpu64` is printed with each failure but does not decide. That
+comparison also rounds `x` itself to Float32, an input perturbation the
+Float64 GPU comparison never sees, so its ratios over the failing readings run
+continuously from ~0.3 to ~4e5 with no gap to put a bound in, and where
+`gpu64_vs_cpu64` is exactly zero no ratio exists at all. Its failures are
+Float32 conditioning or Float32 overflow (non-finite entries where Float64 is
+finite); they are listed in the report, not excused.
+
+`ZERO_REF_EXCEPTIONS` in `analyze.py` names the readings whose reference is
+identically zero at a point, so that no relative error exists there (TAX13322,
+TAXR13322, TAX53322, TAXR53322, GOULDQP2, GOULDQP3: `cons` at an `x0` that
+satisfies the constraints exactly), each with its reason; the cross-point ulp
+test still applies to them. An unlisted `ZERO_REF` is a failure.
