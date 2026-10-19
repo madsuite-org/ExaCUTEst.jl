@@ -1,5 +1,9 @@
 # ExaCUTEst.jl
 
+[![CI](https://github.com/madsuite-org/ExaCUTEst.jl/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/madsuite-org/ExaCUTEst.jl/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/madsuite-org/ExaCUTEst.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/madsuite-org/ExaCUTEst.jl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ExaCUTEst provides the [CUTEst](https://github.com/ralna/CUTEst) test set as
 [ExaModels](https://github.com/exanauts/ExaModels.jl), on the CPU or on a GPU,
 with an API that follows [CUTEst.jl](https://github.com/JuliaSmoothOptimizers/CUTEst.jl).
@@ -142,11 +146,37 @@ to 12.9, since later runtimes no longer support that architecture.
 Versions up to 0.1 implemented each problem by hand. Version 0.2 decodes the
 SIF files instead, and covers the whole collection.
 
+ExaCUTEst itself needs no Fortran compiler. CUTEst.jl is a test dependency,
+used as the reference, so running the tests needs `gfortran`.
+
 ## References
 
-- N. I. M. Gould, D. Orban, Ph. L. Toint, *CUTEst: a Constrained and Unconstrained Testing Environment with safe threads for mathematical optimization*, Computational Optimization and Applications 60(3), 545–557, 2015.
-- A. R. Conn, N. I. M. Gould, Ph. L. Toint, *LANCELOT: A Fortran Package for Large-scale Nonlinear Optimization (Release A)*, Springer, 1992.
-- S. Shin, F. Pacaud, M. Anitescu, *Accelerating optimal power flow with GPUs: SIMD abstraction of nonlinear programs and its application to stochastic optimal power flow*, HICSS-56, 2023.
+1. N. I. M. Gould, D. Orban, Ph. L. Toint, *CUTEst: a Constrained and Unconstrained Testing Environment with safe threads for mathematical optimization*, Computational Optimization and Applications 60(3), 545-557, 2015. [doi:10.1007/s10589-014-9687-3](https://doi.org/10.1007/s10589-014-9687-3)
+2. A. R. Conn, N. I. M. Gould, Ph. L. Toint, *LANCELOT: A Fortran Package for Large-Scale Nonlinear Optimization (Release A)*, Springer Series in Computational Mathematics, Springer, 1992. [doi:10.1007/978-3-662-12211-2](https://doi.org/10.1007/978-3-662-12211-2)
+3. A. R. Conn, N. I. M. Gould, D. Orban, Ph. L. Toint, *The SIF Reference Report (revised version)*, distributed with SIFDecode. [sif.pdf](https://github.com/ralna/SIFDecode/blob/master/doc/pdf/sif.pdf)
+4. S. Gratton, Ph. L. Toint, *S2MPJ and CUTEst optimization problems for Matlab, Python and Julia*, Optimization Methods and Software 40(4), 871-903, 2025. [doi:10.1080/10556788.2025.2490640](https://doi.org/10.1080/10556788.2025.2490640), [arXiv:2407.07812](https://arxiv.org/abs/2407.07812)
+5. S. Shin, M. Schanen, F. Pacaud, A. Montoison, M. Anitescu, *ExaModels.jl: An Algebraic Modeling System for Nonlinear Programming on GPUs*, 2026. [arXiv:2608.16265](https://arxiv.org/abs/2608.16265)
+6. S. Shin, M. Anitescu, F. Pacaud, *Accelerating optimal power flow with GPUs: SIMD abstraction of nonlinear programs and condensed-space interior-point methods*, Electric Power Systems Research 236, 110651, 2024. [doi:10.1016/j.epsr.2024.110651](https://doi.org/10.1016/j.epsr.2024.110651)
+7. A. Montoison, D. Orban, A. Soares Siqueira, and contributors, *CUTEst.jl: Julia's CUTEst interface*. [doi:10.5281/zenodo.1188851](https://doi.org/10.5281/zenodo.1188851)
+8. D. Orban, A. Soares Siqueira, and contributors, *NLPModels.jl: Data Structures for Optimization Models*. [doi:10.5281/zenodo.2558627](https://doi.org/10.5281/zenodo.2558627)
+9. J. Revels, M. Lubin, T. Papamarkou, *Forward-Mode Automatic Differentiation in Julia*, 2016. [arXiv:1607.07892](https://arxiv.org/abs/1607.07892)
+10. V. Churavy, *KernelAbstractions.jl*. [doi:10.5281/zenodo.4021259](https://doi.org/10.5281/zenodo.4021259)
+
+## Acknowledgements
+
+The problems are those of the CUTEst collection [1], in the SIF format of
+LANCELOT [2, 3], maintained by the CUTEst developers; the collections are
+downloaded from their releases. CUTEst.jl [7] defines the API this package
+follows and, through SIFDecode and the compiled Fortran, is the reference every
+model is validated against. Models are ExaModels [5, 6] and implement the
+NLPModels.jl [8] interface. The native implementations differentiate with
+ForwardDiff.jl [9] and run on GPUs through KernelAbstractions.jl [10].
+[S2MPJ](https://github.com/GrattonToint/S2MPJ) [4] translates the same
+collection into native Matlab, Python and Julia.
+
+Version 0.2 builds on ExaCUTEst 0.1, written by Sungho Shin, which implemented
+problems of the collection by hand in ExaModels; its history is preserved in
+this repository.
 
 ## License
 

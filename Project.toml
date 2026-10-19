@@ -5,7 +5,6 @@ authors = ["Sungho Shin <sushin@mit.edu>"]
 
 [deps]
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
-CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
 ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
 ExaModelsSIF = "7f0b2a4e-8c3d-4a9b-9e6f-5b2a1c9d8e01"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
@@ -20,7 +19,7 @@ projects = ["test/gpu"]
 
 [sources]
 ExaModels = {rev = "sif-integration", url = "https://github.com/madsuite-org/ExaModels.jl.git"}
-ExaModelsSIF = {path = "../ExaModelsSIF.jl"}
+ExaModelsSIF = {rev = "master", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
 
 [compat]
 CUTEst = "1.4.0"
@@ -29,17 +28,17 @@ ExaModelsSIF = "0.1"
 ForwardDiff = "1"
 JSON = "0.21, 1"
 KernelAbstractions = "0.9"
-MadNLP = "0.10.1"
 NLPModels = "0.21.12"
 SpecialFunctions = "2"
 julia = "1.10"
 
 [extras]
-MadNLP = "2621e9c9-9eb4-46b1-8089-e8c72242dfb6"
+CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
+FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["LinearAlgebra", "MadNLP", "Random", "SparseArrays", "Test"]
+test = ["CUTEst", "FileWatching", "LinearAlgebra", "Random", "SparseArrays", "Test"]

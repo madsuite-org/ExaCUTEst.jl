@@ -8,10 +8,13 @@
 #
 #   julia --project=. scripts/build_classification.jl
 #
-# External-Fortran problems are decoded for their classification letters only
-# (sizes come from the oracle model), so run it with CUTEst available.
+# External-Fortran problems have no decode, so their sizes come from a
+# CUTEstModel. The script therefore runs in the test/gpu environment, which
+# has CUTEst.jl, and switches to it itself.
+include(joinpath(@__DIR__, "..", "test", "gpu", "activate.jl"))
 using ExaCUTEst, ExaModelsSIF, NLPModels, JSON
 import CUTEst
+using FileWatching.Pidfile: mkpidlock
 
 dir = ExaCUTEst.mastsif()
 db = joinpath(dir, "CLASSF.DB")
@@ -110,17 +113,13 @@ function decoded_entry(name, dir, toks, cls)
 end
 
 # External-Fortran problems have no decode, so their metadata comes from the
-# compiled Fortran instead -- read from the CUTEstModel directly rather than
-# from the oracle ExaModel wrapping it, because only the former classifies row
-# linearity. Taking it from the wrapper instead was wrong for HS85 (1 linear
-# row) and SAROMM (1095), and accidentally right for the other 32 because
-# their rows are all nonlinear anyway.
-function oracle_entry(name, toks, cls)
+# compiled Fortran instead, read from a CUTEstModel, which classifies row
+# linearity (HS85 has 1 linear row, SAROMM 1095).
+function fortran_entry(name, toks, cls)
     # Finalize: the Fortran decoder keeps global state in a shared library, so
-    # leaving models open makes LATER constructions fail. Dropping this cost
-    # BA-L21 and BA-L21LS their entries, and both build fine alone -- the skip
-    # was this script's resource handling, not the problems.
-    ref = CUTEst.CUTEstModel(name)
+    # a model left open makes later constructions fail. CUTEst also compiles
+    # every problem into one shared directory, so the build holds the lock.
+    ref = mkpidlock(() -> CUTEst.CUTEstModel(name), "/tmp/cutest-decode.pid"; wait = true)
     m = ref.meta
     counts = (nvar = m.nvar, ncon = m.ncon,
               ifix = length(m.ifix), ifree = length(m.ifree),
@@ -197,9 +196,9 @@ for (name, toks) in classification_lines(dir, db)
     catch e
         if e isa ExaModelsSIF.ExternalFortranError
             try
-                entries[name] = oracle_entry(name, toks, cls)
+                entries[name] = fortran_entry(name, toks, cls)
             catch e2
-                @warn "skipping $name (oracle)" error = first(sprint(showerror, e2), 90)
+                @warn "skipping $name (external Fortran)" error = first(sprint(showerror, e2), 90)
                 global nfail += 1
             end
         else

@@ -174,7 +174,7 @@ end
     external_fortran_problems() -> Vector{String}
 
 Problems whose element or group functions are hand-coded Fortran appended to
-the SIF file. These load only through the oracle tier (`using CUTEst`), and
-only on the CPU.
+the SIF file. The decoder cannot translate them; `ExaCUTEstModel` builds each
+from its native implementation (see [`native_problems`](@ref)).
 """
 external_fortran_problems() = copy(_EXTERNAL_FORTRAN)

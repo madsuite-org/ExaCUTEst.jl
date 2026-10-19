@@ -1,7 +1,6 @@
 # scripts/compare_classification.jl — validate our decode-derived
 # classification table against CUTEst.jl's Fortran-derived classf.json, field
-# by field over every shared problem. Last run: IDENTICAL on all 19 fields
-# across all 1539 problems (2026-10-14).
+# by field over every shared problem.
 #
 #   julia --project=. scripts/compare_classification.jl [path/to/CUTEst/src/classf.json]
 # Validate ExaCUTEst's decode-derived classification against CUTEst.jl's

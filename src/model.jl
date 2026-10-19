@@ -10,7 +10,7 @@
 
 """
     ExaCUTEstModel(name, args...; T = Float64, backend = nothing,
-                   params = Dict(), external = :oracle, kwargs...)
+                   params = Dict(), kwargs...)
 
 Load SIF problem `name` from the active collection (see [`set_mastsif`](@ref))
 as an `ExaModel`. `name` may also be a path to a `.SIF` file.
@@ -28,16 +28,17 @@ as an `ExaModel`. `name` may also be a path to a `.SIF` file.
   problem becomes a SIMD-abstracted ExaModel rather than Fortran callbacks.
 - `params`: parameter overrides as a `Dict`, e.g. `Dict("N" => 100)`.
   Equivalent to `args...`; merged, with `params` winning on a clash.
-- `external`: what to do when a problem's element/group functions are
-  hand-coded external Fortran (34 problems in the collection, of which two
-  have verified native models -- see [`native_problems`](@ref) -- leaving 32
-  on the oracle tier). `:oracle` (default) wraps the compiled Fortran as
-  ExaModels oracles; `:error` raises `ExaModelsSIF.ExternalFortranError`.
 - `prod`: whether a decoded or native model carries the product helper that
   `hprod!`, `jprod_nln!` and `jtprod_nln!` dispatch on under a `backend`.
   `:auto` (the builders' default) builds it wherever the model's structure
   admits one; see `ExaModelsSIF.prodflag`.
-- `kwargs...`: forwarded to `ExaModelsSIF.sif_decode`.
+- `kwargs...`: forwarded to `ExaModelsSIF.sif_decode`, or to the native
+  builder for a problem in [`native_problems`](@ref).
+
+Problems whose SIF file appends external Fortran are built from their native
+Julia implementations (see [`external_fortran_problems`](@ref)). Such a
+problem with `\$-PARAMETER` overrides, or a SIF file outside the collection
+that appends external Fortran, raises `ExaModelsSIF.ExternalFortranError`.
 
 # Examples
 ```julia
@@ -51,34 +52,18 @@ nlp = ExaCUTEstModel("ROSENBR"; backend = CUDABackend())   # on the GPU
 """
 function ExaCUTEstModel(name::AbstractString, args...; T = Float64,
                         backend = nothing, params::AbstractDict = Dict{String,Any}(),
-                        external::Symbol = :oracle, kwargs...)
+                        kwargs...)
     path = occursin(".SIF", name) && isfile(name) ? abspath(name) : sif_problem_path(name)
     allparams = merge(_parse_param_args(args), Dict{String,Any}(params))
-    external in (:oracle, :error) ||
-        error("external must be :oracle or :error, got :$external")
-    # A verified native model beats both the decoder (which refuses these) and
-    # the oracle tier (CPU-only), so prefer it. Only external-Fortran problems
-    # have entries, so this cannot shadow a decodable problem.
-    # `kwargs` reach the native model too: several take options of their own
-    # (`element_hessian`, `ref_param_rounding`, `single`, `fortran_literals`)
-    # that select between readings of the Fortran, and a silently ignored
-    # keyword would hand back a model other than the one asked for. A keyword
-    # a native model does not accept raises a MethodError naming it.
+    # Only external-Fortran problems have native entries, so this cannot shadow
+    # a decodable problem. `kwargs` reach the native model too: several take
+    # options of their own (`element_hessian`, `ref_param_rounding`, `single`,
+    # `fortran_literals`) that select between readings of the Fortran, and a
+    # keyword a native model does not accept raises a MethodError naming it.
     if isempty(allparams) && haskey(NATIVE_MODELS, String(name))
         return NATIVE_MODELS[String(name)](; T, backend, kwargs...)
     end
-    try
-        return ExaModelsSIF.sif_model(path; T, backend, params = allparams, kwargs...)
-    catch e
-        # hand-coded Fortran: not decodable, so fall through to the compiled
-        # routine (see oracle.jl). Any other failure is a real one -- rethrow.
-        e isa ExaModelsSIF.ExternalFortranError && external === :oracle || rethrow()
-        backend === nothing ||
-            error("$(basename(path)) is an external-Fortran problem; those " *
-                  "evaluate through compiled Fortran callbacks and cannot be " *
-                  "placed on a `backend` (see external_fortran_problems())")
-        return cutest_oracle_model(path; T)
-    end
+    return ExaModelsSIF.sif_model(path; T, backend, params = allparams, kwargs...)
 end
 
 """

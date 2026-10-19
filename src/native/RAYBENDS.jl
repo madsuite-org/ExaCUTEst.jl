@@ -191,13 +191,15 @@
 # operations deep. As plain Julia functions they are generic in the element
 # type (Float64/Float32/BigFloat all evaluate), allocation-free and branch-free
 # on values apart from BLEACHNG's `phi` series switch, which is a removable
-# singularity and not a selector. The consequence is the known upstream gap
-# recorded in CLAUDE.md: `ScalarNonlinearOracle` takes `hvp!`, not an explicit
-# `hess!`, so a full objective `hess_coord` costs one `hvp!` per Hessian column
-# -- 2050 of them for RAYBENDS, measured at ~1 s for one `hess_coord`. `hprod`
-# is one call and is unaffected. (The declared pattern must be DEDUPLICATED
-# for that reconstruction to be right; see `_rb_hess_pattern`. Deduplicated,
-# RAYBENDS declares exactly the 15351 nonzeros CUTEst does.)
+# singularity and not a selector.
+#
+# The registered builders are the kernel ones in RAYBENDS_gpu.jl, which give
+# their `ScalarNonlinearOracle` an explicit `hess!`. The host builders here
+# supply only `hvp!`, so ExaModels assembles their objective `hess_coord` one
+# `hvp!` per Hessian column (2050 of them for RAYBENDS); `hprod` is one call.
+# That column-by-column reconstruction is right only for a DEDUPLICATED
+# declared pattern; see `_rb_hess_pattern`. Deduplicated, RAYBENDS declares the
+# same 15351 nonzeros CUTEst does.
 
 # ===========================================================================
 # RAYBENDS

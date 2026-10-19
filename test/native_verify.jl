@@ -4,7 +4,8 @@
 # arithmetic: a port can be correct and still be reached by the wrong name,
 # with the wrong default, or not at all.
 #
-# Run: julia --project=test test/native_verify.jl [PROBLEM ...]
+# Run: julia --project=. test/native_verify.jl [PROBLEM ...]
+# The script switches to the test/gpu environment, which has CUTEst.jl.
 # Results append to runs/native_verify.tsv as each problem finishes.
 #
 # WHAT A REFERENCE COMPARISON CAN AND CANNOT SETTLE. For most problems the
@@ -16,6 +17,7 @@
 # only where the reference's is the thing in question. Changing what a number
 # is compared against is recorded; loosening a tolerance to cover a
 # disagreement is not done anywhere in this file.
+include(joinpath(@__DIR__, "gpu", "activate.jl"))
 using ExaCUTEst, ExaModels, NLPModels, CUTEst
 using LinearAlgebra, SparseArrays, Printf, Random
 using FileWatching.Pidfile: mkpidlock

@@ -1,8 +1,9 @@
-# Make CUDA loadable for a GPU verification script.
+# Switch a verification script to the test/gpu environment.
 #
-# CUDA is not a dependency of ExaCUTEst and must not become one, so the
-# package's own environment cannot resolve `using CUDA`. This directory is an
-# environment that can, and the scripts run in it.
+# CUDA and CUTEst.jl are not dependencies of ExaCUTEst (CUTEst.jl is a test
+# dependency only), so the package's own environment cannot resolve `using
+# CUDA` or `using CUTEst`. This directory is an environment that can, and the
+# GPU and Fortran-reference verification scripts run in it.
 #
 # It is a workspace member of the package environment (`[workspace]` in the
 # package's Project.toml), so the two share one Manifest.toml and every package
@@ -17,7 +18,7 @@
 # it, and the Quadro GV100 is a 7.0 device.
 #
 # Switching environments here, rather than asking the caller to do it, is what
-# makes `julia --project=. test/<name>_gpu_verify.jl` work.
+# makes `julia --project=. test/<name>_verify.jl` work.
 if Base.active_project() != joinpath(@__DIR__, "Project.toml")
     @eval using Pkg
     Pkg.activate(@__DIR__; io = devnull)

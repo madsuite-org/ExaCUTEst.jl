@@ -38,3 +38,8 @@ test/Manifest.toml
 .nfs*
 .claire/
 .claude/
+
+# Local working files, kept out of the repository
+/runs/
+/CLAUDE.internal.md
+lcov.info

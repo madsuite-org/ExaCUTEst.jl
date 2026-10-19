@@ -72,7 +72,7 @@
 # decode and emitted as one SIMD ExaModels generator, so only the constraint
 # row goes through the oracle.
 #
-# VERIFIED 2026-10-16 against a real CUTEstModel of each problem, at x0 and at
+# Verified against a real CUTEstModel of each problem, at x0 and at
 # a perturbed point, permuted by SIF variable/constraint name: obj, grad, cons,
 # jac, hprod (three random directions per point) and the FULL Lagrangian
 # Hessian, plus lcon/ucon. Worst relative error over all five problems and all
