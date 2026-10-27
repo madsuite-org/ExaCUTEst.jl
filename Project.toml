@@ -18,16 +18,16 @@ SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 projects = ["test/gpu"]
 
 [sources]
-ExaModels = {rev = "sif-integration", url = "https://github.com/madsuite-org/ExaModels.jl.git"}
+ExaModels = {rev = "sif-integration-0.14", url = "https://github.com/madsuite-org/ExaModels.jl.git"}
 ExaModelsSIF = {rev = "master", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
 
 [compat]
 CUTEst = "1.4.0"
-ExaModels = "0.12"
+ExaModels = "0.12, 0.13, 0.14"
 ExaModelsSIF = "0.1"
 ForwardDiff = "1"
 JSON = "0.21, 1"
-KernelAbstractions = "0.9"
+KernelAbstractions = "0.9, 0.10"
 NLPModels = "0.21.12"
 SpecialFunctions = "2"
 julia = "1.10"
