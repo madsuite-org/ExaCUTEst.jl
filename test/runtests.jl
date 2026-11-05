@@ -21,6 +21,7 @@ using Test, LinearAlgebra, SparseArrays, Random
 using NLPModels
 using CUTEst
 using FileWatching.Pidfile: mkpidlock
+using Preferences: load_preference
 
 # CUTEst decodes and compiles every problem into one shared directory, so
 # concurrent CUTEstModel builds on one machine collide. Every construction
@@ -134,6 +135,24 @@ end
         @test ExaCUTEstModel("HS14").meta.nlin == 0
         @test row_linearity("HS35").nlin == 1
         @test row_linearity("ROSENBR") == (nlin = 0, nnln = 0)
+    end
+
+    @testset "precompile preference" begin
+        @test ExaCUTEst.precompile_problems() == String[]
+        @test_throws ArgumentError ExaCUTEst.set_precompile_problems(["NOTAPROBLEM"])
+        @test ExaCUTEst._exercise("ROSENBR").meta.ncon == 0
+        @test ExaCUTEst._exercise("HS14").meta.ncon == 2
+
+        project_prefs = joinpath(dirname(Base.active_project()), "LocalPreferences.toml")
+        before = isfile(project_prefs) ? read(project_prefs) : nothing
+        try
+            @test ExaCUTEst.set_precompile_problems(["HS14"]) == ["HS14"]
+            @test load_preference(ExaCUTEst, "precompile_problems") == ["HS14"]
+            ExaCUTEst.set_precompile_problems(String[])
+            @test load_preference(ExaCUTEst, "precompile_problems") == String[]
+        finally
+            before === nothing ? rm(project_prefs; force = true) : write(project_prefs, before)
+        end
     end
 
     @testset "external Fortran" begin

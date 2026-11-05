@@ -98,6 +98,22 @@ decoding each problem. It agrees with CUTEst.jl's own table on all 19 fields
 for all 1539 problems CUTEst.jl classifies, and also covers the nine problems
 absent from `CLASSF.DB`, so all 1548 can be selected.
 
+## Precompiling problems
+
+Each problem compiles its own callbacks on first use, usually in 5 to 15
+seconds. To store that code in the package image, list the problems:
+
+```julia
+set_precompile_problems(filter(startswith("LUKVL"), list_sif_problems()))
+```
+
+The next Julia session rebuilds the image, and those problems then start
+without compiling. `set_precompile_problems(String[])`, the default, turns this
+off. The list applies to `Float64` on the CPU at default sizes. Image size and
+build time grow with the number of distinct problem structures, and an image
+cannot exceed about 2 GiB, so this is meant for the set you work with rather
+than the whole collection.
+
 ## Correctness
 
 The collection has 1548 problems, and each is compared against the compiled
