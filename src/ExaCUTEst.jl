@@ -79,7 +79,6 @@ export ExaCUTEstModel,
     sif_variable_names,
     sif_constraint_names,
     row_linearity,
-    set_precompile_problems,
-    precompile_problems
+    set_precompile
 
 end # module

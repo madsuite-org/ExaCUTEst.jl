@@ -1,49 +1,34 @@
 # precompile.jl — opt-in compiled problems.
 #
 # An ExaModel's type encodes its expressions, so every distinct problem compiles
-# its own callbacks on first use. Listing problems in the `precompile_problems`
-# preference stores those callbacks in this package's image. The list is read at
-# compile time: changing it invalidates the image, and an empty list, the
-# default, compiles nothing.
+# its own callbacks on first use. The `precompile` preference stores those
+# callbacks for a fixed set of problems in this package's image. It is read at
+# compile time: changing it invalidates the image, and `false`, the default,
+# compiles nothing.
 
-const PRECOMPILE_PROBLEMS = @load_preference("precompile_problems", String[])
+const PRECOMPILE = @load_preference("precompile", false)
+
+# The Luksan-Vlcek problems. One image cannot hold the whole collection: linking
+# fails near 2 GiB.
+_precompile_set() = filter(startswith("LUKVL"), list_sif_problems())
 
 """
-    set_precompile_problems(names)
+    set_precompile(flag::Bool)
 
-Compile the problems `names` into ExaCUTEst's package image, so that building
-and evaluating them in a new Julia session needs no compilation. An empty list
-turns this off, which is the default. The preference is stored in the active
-project's `LocalPreferences.toml` and takes effect in the next Julia session,
-whose `using ExaCUTEst` rebuilds the image.
+Turn on or off compiling problems into ExaCUTEst's package image, so that they
+build and evaluate in a new Julia session without compiling. The default is
+`false`. With `true`, the image holds the Luksan-Vlcek problems (`LUKVLE*` and
+`LUKVLI*`) for `Float64` on the CPU at their default sizes, and problems that
+share their code also start faster.
 
-```julia
-set_precompile_problems(["ROSENBR", "HS71"])
-set_precompile_problems(filter(startswith("LUKVL"), list_sif_problems()))
-set_precompile_problems(String[])
-```
-
-Image size, build time and load time grow with the number of distinct type
-signatures among the problems. Problems of one signature share their code. An
-image cannot exceed about 2 GiB, where linking fails, so this does not hold the
-whole collection. Problems are compiled for `Float64` on the CPU at their
-default sizes; a problem that fails to compile is reported and skipped.
+The setting is stored in the active project's `LocalPreferences.toml` and takes
+effect in the next Julia session, whose `using ExaCUTEst` rebuilds the image.
 """
-function set_precompile_problems(names)
-    names = collect(String, names)
-    unknown = setdiff(names, list_sif_problems())
-    isempty(unknown) || throw(ArgumentError("not in the collection: $(join(unknown, ", "))"))
-    @set_preferences!("precompile_problems" => names)
-    @info "Restart Julia: `using ExaCUTEst` then compiles $(length(names)) problems."
-    return names
+function set_precompile(flag::Bool)
+    @set_preferences!("precompile" => flag)
+    @info "Restart Julia for this to take effect."
+    return flag
 end
-
-"""
-    precompile_problems() -> Vector{String}
-
-The problems compiled into the image loaded in this session.
-"""
-precompile_problems() = copy(PRECOMPILE_PROBLEMS)
 
 # Calls every callback a solver uses, on buffers of the model's own array type.
 function _exercise(name::AbstractString)
@@ -69,9 +54,9 @@ function _exercise(name::AbstractString)
     return nlp
 end
 
-if !isempty(PRECOMPILE_PROBLEMS)
+if PRECOMPILE
     @compile_workload begin
-        for name in PRECOMPILE_PROBLEMS
+        for name in _precompile_set()
             try
                 _exercise(name)
             catch err

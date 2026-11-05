@@ -138,18 +138,18 @@ end
     end
 
     @testset "precompile preference" begin
-        @test ExaCUTEst.precompile_problems() == String[]
-        @test_throws ArgumentError ExaCUTEst.set_precompile_problems(["NOTAPROBLEM"])
+        @test ExaCUTEst.PRECOMPILE === false
+        @test length(ExaCUTEst._precompile_set()) == 40
         @test ExaCUTEst._exercise("ROSENBR").meta.ncon == 0
         @test ExaCUTEst._exercise("HS14").meta.ncon == 2
 
         project_prefs = joinpath(dirname(Base.active_project()), "LocalPreferences.toml")
         before = isfile(project_prefs) ? read(project_prefs) : nothing
         try
-            @test ExaCUTEst.set_precompile_problems(["HS14"]) == ["HS14"]
-            @test load_preference(ExaCUTEst, "precompile_problems") == ["HS14"]
-            ExaCUTEst.set_precompile_problems(String[])
-            @test load_preference(ExaCUTEst, "precompile_problems") == String[]
+            @test ExaCUTEst.set_precompile(true) === true
+            @test load_preference(ExaCUTEst, "precompile") === true
+            ExaCUTEst.set_precompile(false)
+            @test load_preference(ExaCUTEst, "precompile") === false
         finally
             before === nothing ? rm(project_prefs; force = true) : write(project_prefs, before)
         end

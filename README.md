@@ -101,18 +101,16 @@ absent from `CLASSF.DB`, so all 1548 can be selected.
 ## Precompiling problems
 
 Each problem compiles its own callbacks on first use, usually in 5 to 15
-seconds. To store that code in the package image, list the problems:
+seconds. To store that code in the package image:
 
 ```julia
-set_precompile_problems(filter(startswith("LUKVL"), list_sif_problems()))
+set_precompile(true)
 ```
 
-The next Julia session rebuilds the image, and those problems then start
-without compiling. `set_precompile_problems(String[])`, the default, turns this
-off. The list applies to `Float64` on the CPU at default sizes. Image size and
-build time grow with the number of distinct problem structures, and an image
-cannot exceed about 2 GiB, so this is meant for the set you work with rather
-than the whole collection.
+The next Julia session rebuilds the image, and the Luksan-Vlcek problems
+(`LUKVLE*`, `LUKVLI*`) then start without compiling, as do problems that share
+their code. This covers `Float64` on the CPU at default sizes.
+`set_precompile(false)`, the default, turns it off.
 
 ## Correctness
 
