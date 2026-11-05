@@ -18,8 +18,10 @@ _precompile_set() = filter(startswith("LUKVL"), list_sif_problems())
 Turn on or off compiling problems into ExaCUTEst's package image, so that they
 build and evaluate in a new Julia session without compiling. The default is
 `false`. With `true`, the image holds the Luksan-Vlcek problems (`LUKVLE*` and
-`LUKVLI*`) for `Float64` on the CPU at their default sizes, and problems that
-share their code also start faster.
+`LUKVLI*`) at their default sizes, and problems that share their code also
+start faster. The CPU code is `Float64`. A GPU package loaded in the project
+(CUDA, AMDGPU, oneAPI, or Metal in `Float32`) adds that backend's code through
+its extension, provided a device works when the extension precompiles.
 
 The setting is stored in the active project's `LocalPreferences.toml` and takes
 effect in the next Julia session, whose `using ExaCUTEst` rebuilds the image.
@@ -31,8 +33,8 @@ function set_precompile(flag::Bool)
 end
 
 # Calls every callback a solver uses, on buffers of the model's own array type.
-function _exercise(name::AbstractString)
-    nlp = ExaCUTEstModel(name)
+function _exercise(name::AbstractString; T = Float64, backend = nothing)
+    nlp = ExaCUTEstModel(name; T, backend)
     x = copy(nlp.meta.x0)
     v = fill!(similar(x), one(eltype(x)))
     jac_structure!(nlp, similar(x, Int, nlp.meta.nnzj), similar(x, Int, nlp.meta.nnzj))
@@ -43,8 +45,6 @@ function _exercise(name::AbstractString)
         y = fill!(similar(x, nlp.meta.ncon), one(eltype(x)))
         cons(nlp, x)
         jac_coord(nlp, x)
-        jprod(nlp, x, v)
-        jtprod(nlp, x, y)
         hess_coord(nlp, x, y)
         hprod(nlp, x, y, v)
     else
@@ -54,14 +54,22 @@ function _exercise(name::AbstractString)
     return nlp
 end
 
-if PRECOMPILE
-    @compile_workload begin
-        for name in _precompile_set()
-            try
-                _exercise(name)
-            catch err
-                @warn "skipping $name in the package image" exception = err
-            end
+"""
+    _precompile_workload(backend; T = Float64)
+
+Build and evaluate the problems of the precompile set on `backend`. A problem
+that fails is reported and skipped, so that it cannot discard the rest of the
+image. The GPU backend extensions call this from their own workloads.
+"""
+function _precompile_workload(backend; T = Float64)
+    for name in _precompile_set()
+        try
+            _exercise(name; T, backend)
+        catch err
+            @warn "skipping $name in the package image" exception = err
         end
     end
+    return nothing
 end
+
+PRECOMPILE && @compile_workload _precompile_workload(nothing)

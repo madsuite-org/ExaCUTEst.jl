@@ -109,8 +109,12 @@ set_precompile(true)
 
 The next Julia session rebuilds the image, and the Luksan-Vlcek problems
 (`LUKVLE*`, `LUKVLI*`) then start without compiling, as do problems that share
-their code. This covers `Float64` on the CPU at default sizes.
-`set_precompile(false)`, the default, turns it off.
+their code. `set_precompile(false)`, the default, turns it off.
+
+The CPU code covers `Float64` at default sizes. A GPU package in the project
+(CUDA, AMDGPU, oneAPI, or Metal in `Float32`) adds that backend's code through
+its extension, if a device works when the extension precompiles. oneAPI.jl does not
+initialize during precompilation, so its extension currently stores nothing.
 
 ## Correctness
 
