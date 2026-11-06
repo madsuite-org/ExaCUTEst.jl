@@ -32,24 +32,25 @@ function set_precompile(flag::Bool)
     return flag
 end
 
-# Calls every callback a solver uses, on buffers of the model's own array type.
+# Calls every callback a solver uses, through `precompile_callbacks`, and the allocating
+# forms of the NLPModels API. Through `invokelatest`, as from the top level, so that each is
+# compiled as a standalone method.
 function _exercise(name::AbstractString; T = Float64, backend = nothing)
-    nlp = ExaCUTEstModel(name; T, backend)
+    call = Base.invokelatest
+    nlp = call(ExaCUTEstModel, name; T, backend)
+    ExaModels.precompile_callbacks(nlp)
     x = copy(nlp.meta.x0)
     v = fill!(similar(x), one(eltype(x)))
-    jac_structure!(nlp, similar(x, Int, nlp.meta.nnzj), similar(x, Int, nlp.meta.nnzj))
-    hess_structure!(nlp, similar(x, Int, nlp.meta.nnzh), similar(x, Int, nlp.meta.nnzh))
-    obj(nlp, x)
-    grad(nlp, x)
+    call(grad, nlp, x)
     if nlp.meta.ncon > 0
         y = fill!(similar(x, nlp.meta.ncon), one(eltype(x)))
-        cons(nlp, x)
-        jac_coord(nlp, x)
-        hess_coord(nlp, x, y)
-        hprod(nlp, x, y, v)
+        call(cons, nlp, x)
+        call(jac_coord, nlp, x)
+        call(hess_coord, nlp, x, y)
+        call(hprod, nlp, x, y, v)
     else
-        hess_coord(nlp, x)
-        hprod(nlp, x, v)
+        call(hess_coord, nlp, x)
+        call(hprod, nlp, x, v)
     end
     return nlp
 end
@@ -68,6 +69,15 @@ function _precompile_workload(backend; T = Float64)
         catch err
             @warn "skipping $name in the package image" exception = err
         end
+    end
+    # Entry points as callers write them; `-param` overrides give the same model types.
+    name, call = first(_precompile_set()), Base.invokelatest
+    if backend === nothing
+        call(ExaCUTEstModel, name, "-param", "N=100")
+        call(ExaCUTEstModel, name)
+    else
+        call(ExaCUTEstModel, name, "-param", "N=100"; backend)
+        call(ExaCUTEstModel, name; backend)
     end
     return nothing
 end

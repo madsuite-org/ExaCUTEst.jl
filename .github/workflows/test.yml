@@ -45,8 +45,8 @@ jobs:
           julia --color=yes -e '
             using Pkg
             Pkg.activate(; temp = true)
-            Pkg.add(url = "https://github.com/madsuite-org/ExaModels.jl", rev = "sif-integration")
-            Pkg.add(url = "https://github.com/madsuite-org/ExaModelsSIF.jl", rev = "master")
+            Pkg.add(url = "https://github.com/madsuite-org/ExaModels.jl", rev = "cb86c81b29780b64617a8ae17f0093c18898c1e1")
+            Pkg.add(url = "https://github.com/madsuite-org/ExaModelsSIF.jl", rev = "9cae00d588ddd60db80606058830b2fe63864f00")
             Pkg.develop(path = ".")
             Pkg.test("ExaCUTEst")'
       - uses: julia-actions/julia-processcoverage@v1

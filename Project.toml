@@ -32,18 +32,20 @@ ExaCUTEstoneAPIExt = "oneAPI"
 projects = ["test/gpu"]
 
 [sources]
-ExaModels = {rev = "sif-integration", url = "https://github.com/madsuite-org/ExaModels.jl.git"}
-ExaModelsSIF = {rev = "master", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
+# `precompile_callbacks` is on ExaModels main and in no release, and ExaModelsSIF has no
+# release; these pins become version bounds at the next releases.
+ExaModels = {rev = "cb86c81b29780b64617a8ae17f0093c18898c1e1", url = "https://github.com/madsuite-org/ExaModels.jl.git"}
+ExaModelsSIF = {rev = "9cae00d588ddd60db80606058830b2fe63864f00", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
 
 [compat]
 AMDGPU = "2"
 CUDA = "5, 6"
 CUTEst = "1.4.0"
-ExaModels = "0.12"
+ExaModels = "0.15"
 ExaModelsSIF = "0.1"
 ForwardDiff = "1"
 JSON = "0.21, 1"
-KernelAbstractions = "0.9"
+KernelAbstractions = "0.9, 0.10"
 Metal = "1.9"
 NLPModels = "0.21.12"
 oneAPI = "2"
