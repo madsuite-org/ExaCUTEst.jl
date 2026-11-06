@@ -98,6 +98,24 @@ decoding each problem. It agrees with CUTEst.jl's own table on all 19 fields
 for all 1539 problems CUTEst.jl classifies, and also covers the nine problems
 absent from `CLASSF.DB`, so all 1548 can be selected.
 
+## Precompiling problems
+
+Each problem compiles its own callbacks on first use, usually in 5 to 15
+seconds. To store that code in the package image:
+
+```julia
+set_precompile(true)
+```
+
+The next Julia session rebuilds the image, and the Luksan-Vlcek problems
+(`LUKVLE*`, `LUKVLI*`) then start without compiling, as do problems that share
+their code. `set_precompile(false)`, the default, turns it off.
+
+The CPU code covers `Float64` at default sizes. A GPU package in the project
+(CUDA, AMDGPU, oneAPI, or Metal in `Float32`) adds that backend's code through
+its extension, if a device works when the extension precompiles. oneAPI.jl does not
+initialize during precompilation, so its extension currently stores nothing.
+
 ## Correctness
 
 The collection has 1548 problems, and each is compared against the compiled

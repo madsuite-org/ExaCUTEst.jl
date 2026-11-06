@@ -11,6 +11,8 @@ using Artifacts, LazyArtifacts
 using ExaModels
 using ExaModelsSIF
 using NLPModels
+using PrecompileTools: @compile_workload
+using Preferences: @load_preference, @set_preferences!
 import JSON
 import SpecialFunctions
 import ForwardDiff
@@ -58,6 +60,7 @@ include("collection.jl")
 include("classification.jl")
 include("native.jl")
 include("model.jl")
+include("precompile.jl")
 
 export ExaCUTEstModel,
     set_mastsif,
@@ -75,6 +78,7 @@ export ExaCUTEstModel,
     ba_oracle_model,
     sif_variable_names,
     sif_constraint_names,
-    row_linearity
+    row_linearity,
+    set_precompile
 
 end # module

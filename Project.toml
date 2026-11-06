@@ -12,7 +12,21 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LazyArtifacts = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+
+[weakdeps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
+
+[extensions]
+ExaCUTEstAMDGPUExt = "AMDGPU"
+ExaCUTEstCUDAExt = "CUDA"
+ExaCUTEstMetalExt = "Metal"
+ExaCUTEstoneAPIExt = "oneAPI"
 
 [workspace]
 projects = ["test/gpu"]
@@ -22,13 +36,19 @@ ExaModels = {rev = "sif-integration", url = "https://github.com/madsuite-org/Exa
 ExaModelsSIF = {rev = "master", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
 
 [compat]
+AMDGPU = "2"
+CUDA = "5, 6"
 CUTEst = "1.4.0"
 ExaModels = "0.12"
 ExaModelsSIF = "0.1"
 ForwardDiff = "1"
 JSON = "0.21, 1"
 KernelAbstractions = "0.9"
+Metal = "1.9"
 NLPModels = "0.21.12"
+oneAPI = "2"
+PrecompileTools = "1"
+Preferences = "1"
 SpecialFunctions = "2"
 julia = "1.10"
 
@@ -36,9 +56,10 @@ julia = "1.10"
 CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["CUTEst", "FileWatching", "LinearAlgebra", "Random", "SparseArrays", "Test"]
+test = ["CUTEst", "FileWatching", "LinearAlgebra", "Preferences", "Random", "SparseArrays", "Test"]
