@@ -173,9 +173,8 @@ capability 7.0 (for example the V100 and Quadro GV100).
 
 ## Dependencies and local development
 
-`Project.toml` takes ExaModels from the `sif-integration` branch of
-madsuite-org/ExaModels.jl and ExaModelsSIF from the `master` branch of
-madsuite-org/ExaModelsSIF.jl, through `[sources]`. To work on both packages at
+`Project.toml` pins ExaModels and ExaModelsSIF to commits of
+madsuite-org/ExaModels.jl and madsuite-org/ExaModelsSIF.jl, through `[sources]`. To work on both packages at
 once, develop the sibling checkout into this environment:
 
 ```julia
@@ -186,9 +185,8 @@ Pkg.develop(path = "../ExaModelsSIF.jl")
 Pkg then rewrites the `ExaModelsSIF` entry of `[sources]` in `Project.toml` to
 that path. Keep that edit out of commits: CI and users resolve the git URL,
 and a relative path does not exist on their machines. Native ports with an oracle objective need
-ExaModels `sif-integration` at `555b4ed9` or later, which provides `hess!` on
-`ScalarNonlinearOracle`, element-typed oracle buffers, and scalar oracles in
-the KernelAbstractions backend.
+`hess!` on ExaModels' `ScalarNonlinearOracle`, element-typed oracle buffers, and
+scalar oracles in the KernelAbstractions backend.
 
 ## Regenerating the classification table
 

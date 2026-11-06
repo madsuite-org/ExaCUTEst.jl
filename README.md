@@ -144,16 +144,15 @@ wrong value, and fails at any size.
 
 ## Installation
 
-ExaCUTEst is not yet registered. It needs ExaModelsSIF.jl and the
-`sif-integration` branch of
-[madsuite-org/ExaModels.jl](https://github.com/madsuite-org/ExaModels.jl),
-which carries changes not yet in a released ExaModels. Install them first,
-since Pkg does not follow a dependency's own `[sources]`:
+ExaCUTEst is not yet registered. It needs ExaModelsSIF.jl and a commit of
+[madsuite-org/ExaModels.jl](https://github.com/madsuite-org/ExaModels.jl)
+that is in no release. Install them first, since Pkg does not follow a
+dependency's own `[sources]`:
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/madsuite-org/ExaModels.jl", rev = "sif-integration")
-Pkg.add(url = "https://github.com/madsuite-org/ExaModelsSIF.jl")
+Pkg.add(url = "https://github.com/madsuite-org/ExaModels.jl", rev = "cb86c81b29780b64617a8ae17f0093c18898c1e1")
+Pkg.add(url = "https://github.com/madsuite-org/ExaModelsSIF.jl", rev = "9cae00d588ddd60db80606058830b2fe63864f00")
 Pkg.add(url = "https://github.com/madsuite-org/ExaCUTEst.jl")
 ```
 
