@@ -19,12 +19,14 @@ SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 [weakdeps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+ExaModelsCompiler = "3d1e9a26-5b74-4f0c-9a2b-7c8f4e11d3a7"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [extensions]
 ExaCUTEstAMDGPUExt = "AMDGPU"
 ExaCUTEstCUDAExt = "CUDA"
+ExaCUTEstExaModelsCompilerExt = "ExaModelsCompiler"
 ExaCUTEstMetalExt = "Metal"
 ExaCUTEstoneAPIExt = "oneAPI"
 
@@ -32,16 +34,16 @@ ExaCUTEstoneAPIExt = "oneAPI"
 projects = ["test/gpu"]
 
 [sources]
-# `precompile_callbacks` is on ExaModels main and in no release, and ExaModelsSIF has no
-# release; these pins become version bounds at the next releases.
-ExaModels = {rev = "cb86c81b29780b64617a8ae17f0093c18898c1e1", url = "https://github.com/madsuite-org/ExaModels.jl.git"}
-ExaModelsSIF = {rev = "9cae00d588ddd60db80606058830b2fe63864f00", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
+# ExaModelsSIF has no release; `sif_core` is on its branch core-builder. This pin becomes a
+# version bound at its first release.
+ExaModelsSIF = {rev = "core-builder", url = "https://github.com/madsuite-org/ExaModelsSIF.jl.git"}
 
 [compat]
 AMDGPU = "2"
 CUDA = "5, 6"
 CUTEst = "1.4.0"
 ExaModels = "0.15"
+ExaModelsCompiler = "0.4"
 ExaModelsSIF = "0.1"
 ForwardDiff = "1"
 JSON = "0.21, 1"

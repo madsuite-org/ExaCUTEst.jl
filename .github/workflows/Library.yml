@@ -1,0 +1,22 @@
+# The compiled library of the CUTEst problems (cnlp ABI, CPU and CUDA), built in 20 parallel
+# parts joined into one library, and checked, on every change. Pushes to master publish it
+# as the rolling `nightly` release; a version tag
+# (TagBot, on registration) attaches it to that release. Installed with
+# `cnlp install cutest` or `cnlp install cutest@nightly` (https://cnlplib.madsuite.org).
+name: Library
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  library:
+    uses: madsuite-org/cnlplib/.github/workflows/library.yml@main
+    with:
+      name: cutest
+      chunks: "20"
+    permissions:
+      contents: write

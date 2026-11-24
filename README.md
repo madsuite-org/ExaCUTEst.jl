@@ -26,6 +26,33 @@ Problems are read from their SIF files by
 whole collection is available, and each problem is an ExaModel with automatic
 differentiation on every backend ExaModels supports.
 
+## Compiled library
+
+The problems are also published as one compiled shared library implementing the
+[cnlp ABI](https://cnlplib.madsuite.org), with CPU and CUDA evaluation and no Julia needed to
+use it. It holds the 1285 problems listed in
+`ext/ExaCUTEstExaModelsCompilerExt/library.txt` (those that compile and evaluate), each a
+fixed model at its default SIF parameters, named in lowercase with `-` replaced by `_`
+(`rosenbr`, `ba_l1`). Problems whose models carry buffered subexpressions are left out of
+the CUDA build. Each push to `master` updates the `nightly` release:
+
+```sh
+cnlp install cutest@nightly        # https://cnlplib.madsuite.org
+cnlp solve @cutest:rosenbr
+```
+
+From Julia, through [CNLPLib.jl](https://github.com/madsuite-org/CNLPLib.jl):
+
+```julia
+using CNLPLib, MadNLP
+madnlp(CNLPModel("@cutest", :rosenbr))
+```
+
+The library is built in 20 parallel parts and joined into one; each part carries its own
+Julia runtime, started when one of its problems is first used. To build it yourself, with
+ExaModelsCompiler loaded: `compile_all(ExaCUTEst; path = "cutest", bundle = true)` (or
+`problems = [...]` for a smaller one).
+
 ## Relationship to CUTEst.jl
 
 CUTEst.jl calls the Fortran CUTEst library: it decodes each SIF file with
