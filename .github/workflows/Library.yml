@@ -14,10 +14,9 @@ on:
 
 jobs:
   library:
-    uses: madsuite-org/cnlplib/.github/workflows/library.yml@puma/chunked
+    uses: madsuite-org/cnlplib/.github/workflows/library.yml@main
     with:
       name: cutest
       chunks: "20"
-      cnlplib-ref: puma/chunked   # until madsuite-org/cnlplib merges the chunked build
     permissions:
       contents: write
